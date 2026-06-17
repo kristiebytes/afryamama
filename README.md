@@ -1,4 +1,4 @@
-# AfyaMama Maternal & Infant Health Platform
+# AfyaMama Maternal & Infant Health Platform: Noela and Kristie
 
 AfyaMama is a digital health platform designed to improve maternal and child health outcomes by connecting pregnant women and mothers with healthcare providers. The system provides clinical tools for doctors and administrators, and a mobile portal for mothers to monitor their pregnancy milestone markers, infant growth records, immunizations, and clinical appointments.
 
