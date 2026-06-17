@@ -1,0 +1,25 @@
+{
+  "name": "afryamama-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AfyaMama TypeScript Monorepo",
+  "scripts": {
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:mobile": "npm run start -w apps/mobile",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "build": "npm run build --workspaces --if-present",
+    "install:all": "npm install"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "server"
+  ],
+  "devDependencies": {
+    "prisma": "^5.15.0",
+    "typescript": "^5.4.5"
+  }
+}

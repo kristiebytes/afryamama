@@ -1,0 +1,170 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  MOTHER
+  DOCTOR
+  ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum ImmunizationStatus {
+  PENDING
+  COMPLETED
+}
+
+enum PregnancyStatus {
+  ACTIVE
+  COMPLETED
+  MISCARRIAGE
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  mother       Mother?
+  doctor       Doctor?
+  notifications Notification[]
+}
+
+model Mother {
+  id           String        @id @default(uuid())
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String?
+  dateOfBirth  DateTime?
+  location     String?
+  bloodGroup   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  children     Child[]
+  pregnancies  Pregnancy[]
+  appointments Appointment[]
+}
+
+model Doctor {
+  id             String        @id @default(uuid())
+  userId         String        @unique
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  phone          String?
+  specialization String?
+  hospital       String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  appointments   Appointment[]
+}
+
+model Child {
+  id            String         @id @default(uuid())
+  motherId      String
+  mother        Mother         @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  name          String
+  dateOfBirth   DateTime
+  gender        String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  growthRecords GrowthRecord[]
+  immunizations Immunization[]
+}
+
+model Pregnancy {
+  id                 String           @id @default(uuid())
+  motherId           String
+  mother             Mother           @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  startDate          DateTime
+  estimatedDueDate   DateTime
+  status             PregnancyStatus  @default(ACTIVE)
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  maternalRecords    MaternalRecord[]
+}
+
+model Appointment {
+  id          String            @id @default(uuid())
+  motherId    String
+  mother      Mother            @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  doctorId    String
+  doctor      Doctor            @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  dateTime    DateTime
+  reason      String
+  status      AppointmentStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model MaternalRecord {
+  id            String    @id @default(uuid())
+  pregnancyId   String
+  pregnancy     Pregnancy @relation(fields: [pregnancyId], references: [id], onDelete: Cascade)
+  weight        Float?
+  bloodPressure String?
+  heartRate     Int?
+  checkupDate   DateTime
+  clinicalNotes String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model GrowthRecord {
+  id          String   @id @default(uuid())
+  childId     String
+  child       Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  weight      Float
+  height      Float
+  recordedDate DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Immunization {
+  id              String             @id @default(uuid())
+  childId         String
+  child           Child              @relation(fields: [childId], references: [id], onDelete: Cascade)
+  vaccineName     String
+  scheduledDate   DateTime
+  dateAdministered DateTime?
+  status          ImmunizationStatus @default(PENDING)
+  notes           String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model WellnessTip {
+  id             String   @id @default(uuid())
+  title          String
+  content        String
+  targetAudience String   // e.g. "ALL", "PREGNANT", "NEW_MOTHERS"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
