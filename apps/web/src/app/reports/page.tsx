@@ -1,14 +1,10 @@
 'use client';
 
 import React from 'react';
-import Sidebar from '@/components/Sidebar';
 
 export default function ReportsPage() {
   return (
-    <div className="dashboard-layout">
-      <Sidebar currentPath="/reports" role="DOCTOR" userName="Dr. Jane Mwangi" />
-      
-      <main className="main-content">
+    <main className="main-content">
         <div className="header-container">
           <div>
             <h1 className="page-title">Health Reports & Analytics</h1>
@@ -106,6 +102,5 @@ export default function ReportsPage() {
           </div>
         </div>
       </main>
-    </div>
   );
 }

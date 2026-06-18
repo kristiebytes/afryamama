@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Sidebar from '@/components/Sidebar';
 
 export default function MothersPage() {
   const [search, setSearch] = useState('');
@@ -19,10 +18,7 @@ export default function MothersPage() {
   );
 
   return (
-    <div className="dashboard-layout">
-      <Sidebar currentPath="/mothers" role="DOCTOR" userName="Dr. Jane Mwangi" />
-      
-      <main className="main-content">
+    <main className="main-content">
         <div className="header-container">
           <div>
             <h1 className="page-title">Mothers Registry</h1>
@@ -88,6 +84,5 @@ export default function MothersPage() {
           </div>
         </div>
       </main>
-    </div>
   );
 }

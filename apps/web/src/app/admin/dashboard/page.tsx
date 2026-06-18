@@ -1,54 +1,138 @@
 'use client';
 
 import React from 'react';
-import Sidebar from '@/components/Sidebar';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { firebaseDb } from '@/lib/firebaseClient';
+
+interface DashboardUserRow {
+  id: string;
+  email: string;
+  role: string;
+  createdDate: string;
+  status: string;
+}
+
+interface DashboardMetrics {
+  clinicians: number;
+  users: number;
+  alerts: number;
+  admins: number;
+}
+
+const emptyMetrics: DashboardMetrics = {
+  clinicians: 0,
+  users: 0,
+  alerts: 0,
+  admins: 0,
+};
+
+function readDate(value: unknown): string {
+  if (value && typeof value === 'object' && 'toDate' in (value as Record<string, unknown>)) {
+    try {
+      return (value as { toDate: () => Date }).toDate().toISOString().slice(0, 10);
+    } catch {
+      return '-';
+    }
+  }
+
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  }
+
+  return '-';
+}
 
 export default function AdminDashboard() {
+  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
+  const [rows, setRows] = useState<DashboardUserRow[]>([]);
+
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const [doctorsSnapshot, mothersSnapshot, notificationsSnapshot, usersSnapshot, adminsSnapshot] = await Promise.all([
+          getDocs(collection(firebaseDb, 'doctors')),
+          getDocs(collection(firebaseDb, 'mothers')),
+          getDocs(collection(firebaseDb, 'notifications')),
+          getDocs(collection(firebaseDb, 'users')),
+          getDocs(collection(firebaseDb, 'admins')),
+        ]);
+
+        const usersRows = usersSnapshot.docs.map((docItem) => {
+          const data = docItem.data();
+          const role = (data.role || data.Role || 'USER').toString().toUpperCase();
+          return {
+            id: docItem.id,
+            email: (data.email || data.Email || '-').toString(),
+            role,
+            createdDate: readDate(data.createdAt || data.created_at),
+            status: (data.status || 'Active').toString(),
+          };
+        });
+
+        setMetrics({
+          clinicians: doctorsSnapshot.size,
+          users: usersSnapshot.size + mothersSnapshot.size + adminsSnapshot.size,
+          alerts: notificationsSnapshot.size,
+          admins: adminsSnapshot.size,
+        });
+
+        setRows(usersRows.slice(0, 10));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, []);
+
+  const systemStatus = useMemo(() => {
+    if (loading) return 'CHECKING';
+    return 'ONLINE';
+  }, [loading]);
+
   return (
-    <div className="dashboard-layout">
-      <Sidebar currentPath="/admin/dashboard" role="ADMIN" userName="System Administrator" />
-      
-      <main className="main-content">
+    <main className="main-content">
         <div className="header-container">
           <div>
             <h1 className="page-title">Administrator Dashboard</h1>
             <p className="page-subtitle">System metrics, logs, and user management center.</p>
-          </div>
-          <div>
-            <button className="btn btn-accent">+ Register Clinician</button>
           </div>
         </div>
 
         <div className="card-grid">
           <div className="stat-card secondary">
             <span className="stat-title">Registered Clinicians</span>
-            <div className="stat-value">48</div>
+            <div className="stat-value">{loading ? '...' : metrics.clinicians.toLocaleString()}</div>
             <span className="stat-desc">
-              Obstetricians, Pediatricians, Nurses
+              Obstetricians, Pediatricians, Nurses from Firestore
             </span>
           </div>
 
           <div className="stat-card secondary">
             <span className="stat-title">Total Registered Users</span>
-            <div className="stat-value">2,854</div>
+            <div className="stat-value">{loading ? '...' : metrics.users.toLocaleString()}</div>
             <span className="stat-desc">
-              <span style={{ color: 'var(--success)', fontWeight: '600' }}>+18%</span> growth this quarter
+              Includes admins, doctors, mothers, and users documents
             </span>
           </div>
 
           <div className="stat-card secondary">
             <span className="stat-title">Dispatched Alerts</span>
-            <div className="stat-value">12,490</div>
+            <div className="stat-value">{loading ? '...' : metrics.alerts.toLocaleString()}</div>
             <span className="stat-desc">
-              SMS, Web Push, Wellness Tips
+              Notifications stored in Firestore
             </span>
           </div>
 
           <div className="stat-card secondary">
             <span className="stat-title">System Status</span>
-            <div className="stat-value" style={{ color: 'var(--success)', background: 'none', WebkitTextFillColor: 'initial' }}>ONLINE</div>
+            <div className="stat-value" style={{ color: 'var(--success)', background: 'none', WebkitTextFillColor: 'initial' }}>{systemStatus}</div>
             <span className="stat-desc">
-              All REST nodes reporting healthy
+              Admin nodes and Firebase connectivity check
             </span>
           </div>
         </div>
@@ -56,7 +140,9 @@ export default function AdminDashboard() {
         <div className="content-card">
           <div className="card-header">
             <span>System Users & Activity</span>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>Audit Logs</button>
+            <Link href="/admin/reports" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+              Audit Logs
+            </Link>
           </div>
           
           <div className="table-container">
@@ -72,41 +158,38 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>u-doctor-1</td>
-                  <td>doctor@afryamama.org</td>
-                  <td><span className="badge badge-success" style={{ color: '#8b5cf6', borderColor: 'rgba(139, 92, 246, 0.2)', backgroundColor: 'rgba(139, 92, 246, 0.05)' }}>DOCTOR</span></td>
-                  <td>2026-01-15</td>
-                  <td><span className="badge badge-success">Active</span></td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>Modify</button>
-                  </td>
-                </tr>
-                <tr>
-                  <td>u-mother-1</td>
-                  <td>mother@afryamama.org</td>
-                  <td><span className="badge badge-success" style={{ color: '#ec4899', borderColor: 'rgba(236, 72, 153, 0.2)', backgroundColor: 'rgba(236, 72, 153, 0.05)' }}>MOTHER</span></td>
-                  <td>2026-02-20</td>
-                  <td><span className="badge badge-success">Active</span></td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>Modify</button>
-                  </td>
-                </tr>
-                <tr>
-                  <td>u-admin-1</td>
-                  <td>admin@afryamama.org</td>
-                  <td><span className="badge badge-success" style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.2)', backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>ADMIN</span></td>
-                  <td>2026-01-01</td>
-                  <td><span className="badge badge-success">Active</span></td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>Modify</button>
-                  </td>
-                </tr>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6}>Loading users from Firestore...</td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>No user activity records found in Firestore.</td>
+                  </tr>
+                ) : (
+                  rows.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.id}</td>
+                      <td>{row.email}</td>
+                      <td>
+                        <span className="badge badge-success" style={{ color: '#8b5cf6', borderColor: 'rgba(139, 92, 246, 0.2)', backgroundColor: 'rgba(139, 92, 246, 0.05)' }}>
+                          {row.role}
+                        </span>
+                      </td>
+                      <td>{row.createdDate}</td>
+                      <td><span className="badge badge-success">{row.status}</span></td>
+                      <td>
+                        <Link href="/admin/users" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                          Manage
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </main>
-    </div>
   );
 }

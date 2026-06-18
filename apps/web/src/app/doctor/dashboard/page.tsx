@@ -1,14 +1,11 @@
 'use client';
 
 import React from 'react';
-import Sidebar from '@/components/Sidebar';
+import Link from 'next/link';
 
 export default function DoctorDashboard() {
   return (
-    <div className="dashboard-layout">
-      <Sidebar currentPath="/doctor/dashboard" role="DOCTOR" userName="Dr. Jane Mwangi" />
-      
-      <main className="main-content">
+    <main className="main-content">
         <div className="header-container">
           <div>
             <h1 className="page-title">Clinician Dashboard</h1>
@@ -79,7 +76,9 @@ export default function DoctorDashboard() {
                   <td>Routine Prenatal (Trimester 2)</td>
                   <td><span className="badge badge-warning">Pending</span></td>
                   <td>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>Check-in</button>
+                    <Link href="/records/anc/m-1" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                      Check-in
+                    </Link>
                   </td>
                 </tr>
                 <tr>
@@ -89,7 +88,9 @@ export default function DoctorDashboard() {
                   <td>Postnatal Checkup (6 Weeks)</td>
                   <td><span className="badge badge-success">Confirmed</span></td>
                   <td>
-                    <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>Open File</button>
+                    <Link href="/records/mother/m-1" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                      Open File
+                    </Link>
                   </td>
                 </tr>
                 <tr>
@@ -99,7 +100,9 @@ export default function DoctorDashboard() {
                   <td>Infant Immunization</td>
                   <td><span className="badge badge-success">Confirmed</span></td>
                   <td>
-                    <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>Open File</button>
+                    <Link href="/records/child/m-1" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                      Open File
+                    </Link>
                   </td>
                 </tr>
               </tbody>
@@ -107,6 +110,5 @@ export default function DoctorDashboard() {
           </div>
         </div>
       </main>
-    </div>
   );
 }
