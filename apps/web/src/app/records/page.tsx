@@ -1,16 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import Sidebar from '@/components/Sidebar';
+import Link from 'next/link';
 
 export default function RecordsPage() {
   const [activeTab, setActiveTab] = useState<'maternal' | 'child'>('maternal');
 
   return (
-    <div className="dashboard-layout">
-      <Sidebar currentPath="/records" role="DOCTOR" userName="Dr. Jane Mwangi" />
-      
-      <main className="main-content">
+    <main className="main-content">
         <div className="header-container">
           <div>
             <h1 className="page-title">Medical Records</h1>
@@ -34,6 +31,9 @@ export default function RecordsPage() {
           >
             Child Development & Vaccines
           </button>
+          <Link href="/records/anc/m-1" className="btn btn-secondary">
+            Open ANC Detail
+          </Link>
         </div>
 
         {activeTab === 'maternal' ? (
@@ -121,7 +121,6 @@ export default function RecordsPage() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+        </main>
   );
 }

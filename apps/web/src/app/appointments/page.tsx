@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Sidebar from '@/components/Sidebar';
 
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState([
@@ -17,10 +16,7 @@ export default function AppointmentsPage() {
   };
 
   return (
-    <div className="dashboard-layout">
-      <Sidebar currentPath="/appointments" role="DOCTOR" userName="Dr. Jane Mwangi" />
-      
-      <main className="main-content">
+    <main className="main-content">
         <div className="header-container">
           <div>
             <h1 className="page-title">Appointments Scheduler</h1>
@@ -103,6 +99,5 @@ export default function AppointmentsPage() {
           </div>
         </div>
       </main>
-    </div>
   );
 }
