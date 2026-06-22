@@ -35,8 +35,11 @@ export interface MobileVaccine {
 }
 
 export interface MobileChildProfile {
+  id: string;
+  childCode: string;
   childName: string;
   childBirth: string;
+  order: number;
 }
 
 export interface MobileTip {
@@ -52,6 +55,17 @@ export interface MobileMotherProfile {
   email: string;
   phone: string;
   motherCode: string;
+}
+
+export interface MobileMotherProfileDetails extends MobileMotherProfile {
+  county: string;
+  facility: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  stage: string;
+  pregnancyWeek: string;
+  babyAgeMonths: string;
+  childrenCount: number;
 }
 
 export interface MobileMilestone {
@@ -73,10 +87,20 @@ export interface MobileNotification {
 
 export interface MobileGrowthPoint {
   id: string;
+  childId: string;
   date: string;
   weight: string;
   height: string;
   headCircumference: string;
+}
+
+export interface MobileTimelineItem {
+  id: string;
+  date: string;
+  title: string;
+  detail: string;
+  type: 'APPOINTMENT' | 'MILESTONE' | 'VACCINE' | 'NOTIFICATION';
+  status: string;
 }
 
 function readText(value: unknown, fallback = ''): string {
@@ -111,6 +135,21 @@ function readBoolean(value: unknown, fallback = false): boolean {
     if (normalized === 'false') return false;
   }
   return fallback;
+}
+
+function toDateValue(input: string): Date | null {
+  if (!input.trim()) return null;
+  const parsed = new Date(input);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+  return null;
+}
+
+function uniqueById<T extends { id: string }>(rows: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const row of rows) {
+    map.set(row.id, row);
+  }
+  return Array.from(map.values());
 }
 
 async function findByEmail(
@@ -182,67 +221,51 @@ export async function fetchRecords(email: string): Promise<MobileRecord[]> {
 }
 
 export async function fetchImmunizationData(
-  email: string
-): Promise<{ child: MobileChildProfile | null; vaccines: MobileVaccine[] }> {
-  const motherDoc = await findByEmail(['mothers', 'Mothers'], email);
-  const motherId = motherDoc?.id || null;
+  email: string,
+  childId?: string
+): Promise<{ children: MobileChildProfile[]; selectedChildId: string | null; vaccines: MobileVaccine[] }> {
+  const children = await fetchChildrenProfiles(email);
+  const selectedChild =
+    children.find((item) => item.id === childId) ||
+    children[0] ||
+    null;
 
-  let child: MobileChildProfile | null = null;
-  let childId: string | null = null;
-
-  const childCollections = ['children', 'Children'];
-  for (const name of childCollections) {
-    const conditions = motherId
-      ? [
-          query(collection(firebaseDb, name), where('motherId', '==', motherId), limit(1)),
-          query(collection(firebaseDb, name), where('mother_id', '==', motherId), limit(1)),
-        ]
-      : [];
-
-    for (const condition of conditions) {
-      const snap = await getDocs(condition);
-      if (snap.empty) continue;
-
-      const item = snap.docs[0];
-      const data = item.data();
-      childId = item.id;
-      child = {
-        childName: readText(data.name || data.childName || data.full_name, 'Child profile'),
-        childBirth: readDate(data.dob || data.dateOfBirth || data.birthDate, 'Birth date not set'),
-      };
-      break;
-    }
-
-    if (child) break;
-  }
-
-  if (!childId) {
-    return { child, vaccines: [] };
+  if (!selectedChild) {
+    return { children, selectedChildId: null, vaccines: [] };
   }
 
   const vaccineCollections = ['immunizations', 'vaccinations', 'vaccine_records'];
   const vaccines: MobileVaccine[] = [];
 
   for (const name of vaccineCollections) {
-    const snap = await getDocs(query(collection(firebaseDb, name), where('childId', '==', childId)));
-    if (snap.empty) continue;
+    const conditions = [
+      query(collection(firebaseDb, name), where('childId', '==', selectedChild.id)),
+      query(collection(firebaseDb, name), where('child_id', '==', selectedChild.id)),
+      query(collection(firebaseDb, name), where('childCode', '==', selectedChild.childCode)),
+      query(collection(firebaseDb, name), where('child_code', '==', selectedChild.childCode)),
+    ];
 
-    for (const item of snap.docs) {
-      const data = item.data();
-      const status = readText(data.status, 'PENDING').toUpperCase() === 'COMPLETED' ? 'COMPLETED' : 'PENDING';
-      vaccines.push({
-        id: item.id,
-        name: readText(data.name || data.vaccineName || data.title, 'Vaccine'),
-        scheduled: readDate(data.scheduledDate || data.scheduled_for || data.schedule, 'Schedule not set'),
-        administered: readDate(data.administeredDate || data.givenOn || data.completedAt, '' ) || null,
-        status,
-      });
+    for (const condition of conditions) {
+      const snap = await getDocs(condition);
+      if (snap.empty) continue;
+
+      for (const item of snap.docs) {
+        const data = item.data();
+        const status = readText(data.status, 'PENDING').toUpperCase() === 'COMPLETED' ? 'COMPLETED' : 'PENDING';
+        vaccines.push({
+          id: item.id,
+          name: readText(data.name || data.vaccineName || data.title, 'Vaccine'),
+          scheduled: readDate(data.scheduledDate || data.scheduled_for || data.schedule, 'Schedule not set'),
+          administered: readDate(data.administeredDate || data.givenOn || data.completedAt, '' ) || null,
+          status,
+        });
+      }
     }
 
     if (vaccines.length > 0) break;
   }
 
-  return { child, vaccines };
+  return { children, selectedChildId: selectedChild.id, vaccines: uniqueById(vaccines) };
 }
 
 export async function fetchWellnessTips(email: string): Promise<MobileTip[]> {
@@ -293,6 +316,105 @@ export async function fetchMotherProfile(email: string): Promise<MobileMotherPro
     phone: readText(data.phone || data.phoneNumber || data.tel, 'Not provided'),
     motherCode: readText(data.motherCode || data.mother_code || data.code, 'Not set'),
   };
+}
+
+export async function fetchMotherProfileDetails(email: string): Promise<MobileMotherProfileDetails | null> {
+  const doc = await findByEmail(['mothers', 'Mothers'], email);
+  if (!doc) return null;
+
+  const data = doc.data();
+  const firstName = readText(data.firstName || data.first_name);
+  const lastName = readText(data.lastName || data.last_name);
+  const combinedName = `${firstName} ${lastName}`.trim();
+  const fullName = readText(data.fullName || data.full_name || data.name, combinedName || 'Mother');
+  const children = readChildrenFromMotherDoc(data.children || data.childProfiles);
+
+  return {
+    id: doc.id,
+    fullName,
+    email: readText(data.email || data.Email, email),
+    phone: readText(data.phone || data.phoneNumber || data.tel, 'Not provided'),
+    motherCode: readText(data.motherCode || data.mother_code || data.code, 'Not set'),
+    county: readText(data.county, ''),
+    facility: readText(data.facility || data.preferredFacility, ''),
+    emergencyContactName: readText(data.emergencyContactName || data.emergency_name, ''),
+    emergencyContactPhone: readText(data.emergencyContactPhone || data.emergency_phone, ''),
+    stage: readText(data.stage || data.motherStage, 'PRENATAL').toUpperCase(),
+    pregnancyWeek: readText(data.pregnancyWeek || data.week || data.currentWeek, ''),
+    babyAgeMonths: readText(data.babyAgeMonths || data.baby_months || data.infantAgeMonths, ''),
+    childrenCount: children.length,
+  };
+}
+
+function readChildrenFromMotherDoc(value: unknown): MobileChildProfile[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.map((item, index) => {
+    const data = item as Record<string, unknown>;
+    return {
+      id: readText(data.id || data.childId, `embedded-${index + 1}`),
+      childCode: readText(data.childCode || data.code, `CH${index + 1}`),
+      childName: readText(data.fullName || data.name || data.childName, `Child ${index + 1}`),
+      childBirth: readDate(data.birthDate || data.dob || data.dateOfBirth, 'Birth date not set'),
+      order: Number.isFinite(Number(data.order)) ? Number(data.order) : index + 1,
+    } as MobileChildProfile;
+  });
+}
+
+export async function fetchChildrenProfiles(email: string): Promise<MobileChildProfile[]> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const motherDoc = await findByEmail(['mothers', 'Mothers'], normalizedEmail);
+  const motherId = motherDoc?.id || '';
+  const motherData = motherDoc?.data() || {};
+  const motherCode = readText((motherData as Record<string, unknown>).motherCode || (motherData as Record<string, unknown>).mother_code || (motherData as Record<string, unknown>).code, '');
+
+  const rows: MobileChildProfile[] = [];
+  const childCollections = ['children', 'Children'];
+  for (const name of childCollections) {
+    const conditions = [
+      query(collection(firebaseDb, name), where('motherEmail', '==', normalizedEmail)),
+      query(collection(firebaseDb, name), where('mother_email', '==', normalizedEmail)),
+      query(collection(firebaseDb, name), where('email', '==', normalizedEmail)),
+      ...(motherId
+        ? [
+            query(collection(firebaseDb, name), where('motherId', '==', motherId)),
+            query(collection(firebaseDb, name), where('mother_id', '==', motherId)),
+          ]
+        : []),
+      ...(motherCode
+        ? [
+            query(collection(firebaseDb, name), where('motherCode', '==', motherCode)),
+            query(collection(firebaseDb, name), where('mother_code', '==', motherCode)),
+          ]
+        : []),
+    ];
+
+    for (const condition of conditions) {
+      const snapshot = await getDocs(condition);
+      if (snapshot.empty) continue;
+
+      for (const docRow of snapshot.docs) {
+        const data = docRow.data();
+        rows.push({
+          id: docRow.id,
+          childCode: readText(data.childCode || data.code, docRow.id),
+          childName: readText(data.fullName || data.name || data.childName, 'Child profile'),
+          childBirth: readDate(data.birthDate || data.dob || data.dateOfBirth, 'Birth date not set'),
+          order: Number.isFinite(Number(data.order)) ? Number(data.order) : rows.length + 1,
+        });
+      }
+    }
+
+    if (rows.length > 0) break;
+  }
+
+  const uniqueRows = uniqueById(rows);
+  if (uniqueRows.length > 0) {
+    return uniqueRows.sort((a, b) => a.order - b.order);
+  }
+
+  const embeddedChildren = readChildrenFromMotherDoc((motherData as Record<string, unknown>).children || (motherData as Record<string, unknown>).childProfiles);
+  return embeddedChildren.sort((a, b) => a.order - b.order);
 }
 
 export async function fetchMilestones(email: string): Promise<MobileMilestone[]> {
@@ -352,9 +474,11 @@ export async function fetchNotifications(email: string): Promise<MobileNotificat
   return notifications;
 }
 
-export async function fetchGrowthMonitoring(email: string): Promise<MobileGrowthPoint[]> {
+export async function fetchGrowthMonitoring(email: string, childId?: string): Promise<MobileGrowthPoint[]> {
   const motherDoc = await findByEmail(['mothers', 'Mothers'], email);
   const motherId = motherDoc?.id || null;
+  const children = await fetchChildrenProfiles(email);
+  const selectedChild = children.find((item) => item.id === childId) || children[0] || null;
 
   const collectionNames = ['growth_monitoring', 'growthMonitoring', 'child_growth'];
 
@@ -362,6 +486,14 @@ export async function fetchGrowthMonitoring(email: string): Promise<MobileGrowth
     const queries = [
       query(collection(firebaseDb, name), where('email', '==', email)),
       query(collection(firebaseDb, name), where('motherEmail', '==', email)),
+      ...(selectedChild
+        ? [
+            query(collection(firebaseDb, name), where('childId', '==', selectedChild.id)),
+            query(collection(firebaseDb, name), where('child_id', '==', selectedChild.id)),
+            query(collection(firebaseDb, name), where('childCode', '==', selectedChild.childCode)),
+            query(collection(firebaseDb, name), where('child_code', '==', selectedChild.childCode)),
+          ]
+        : []),
       ...(motherId
         ? [
             query(collection(firebaseDb, name), where('motherId', '==', motherId)),
@@ -378,6 +510,7 @@ export async function fetchGrowthMonitoring(email: string): Promise<MobileGrowth
         const data = item.data();
         return {
           id: item.id,
+          childId: readText(data.childId || data.child_id || data.childCode || data.child_code, ''),
           date: readDate(data.date || data.recordedAt || data.createdAt),
           weight: readText(data.weight || data.weightKg || data.childWeight, 'Not recorded'),
           height: readText(data.height || data.length || data.childHeight, 'Not recorded'),
@@ -388,4 +521,67 @@ export async function fetchGrowthMonitoring(email: string): Promise<MobileGrowth
   }
 
   return [];
+}
+
+export async function fetchTimeline(email: string): Promise<MobileTimelineItem[]> {
+  const [appointments, milestones, notifications, immunization] = await Promise.all([
+    fetchAppointments(email),
+    fetchMilestones(email),
+    fetchNotifications(email),
+    fetchImmunizationData(email),
+  ]);
+
+  const rows: MobileTimelineItem[] = [];
+
+  appointments.forEach((item) => {
+    rows.push({
+      id: `appt-${item.id}`,
+      date: item.date,
+      title: item.reason,
+      detail: `${item.time} with ${item.doctor}`,
+      type: 'APPOINTMENT',
+      status: item.status,
+    });
+  });
+
+  milestones.forEach((item) => {
+    rows.push({
+      id: `mile-${item.id}`,
+      date: item.week,
+      title: item.title,
+      detail: item.details,
+      type: 'MILESTONE',
+      status: item.status,
+    });
+  });
+
+  notifications.forEach((item) => {
+    rows.push({
+      id: `note-${item.id}`,
+      date: item.date,
+      title: item.title,
+      detail: item.message,
+      type: 'NOTIFICATION',
+      status: item.read ? 'READ' : 'NEW',
+    });
+  });
+
+  immunization.vaccines.forEach((item) => {
+    rows.push({
+      id: `vax-${item.id}`,
+      date: item.administered || item.scheduled,
+      title: item.name,
+      detail: item.administered ? `Given on ${item.administered}` : `Due ${item.scheduled}`,
+      type: 'VACCINE',
+      status: item.status,
+    });
+  });
+
+  return rows
+    .sort((a, b) => {
+      const bDate = toDateValue(b.date)?.getTime() || 0;
+      const aDate = toDateValue(a.date)?.getTime() || 0;
+      return bDate - aDate;
+    })
+    .slice(0, 40);
 }

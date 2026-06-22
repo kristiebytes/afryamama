@@ -3,12 +3,14 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingVi
 
 interface LoginScreenProps {
   onLoginSuccess: (email: string, password: string) => Promise<void>;
+  onSignUpSuccess: (email: string, password: string) => Promise<void>;
 }
 
-export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+export default function LoginScreen({ onLoginSuccess, onSignUpSuccess }: LoginScreenProps) {
   const [email, setEmail] = useState('mother@afryamama.org');
   const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
+  const [signupLoading, setSignupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
@@ -26,6 +28,29 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       setError('Login failed. Check credentials and try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSignUp = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError('Email and password are required.');
+      return;
+    }
+
+    if (password.trim().length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setSignupLoading(true);
+    setError(null);
+
+    try {
+      await onSignUpSuccess(email, password);
+    } catch {
+      setError('Account creation failed. Try a different email or password.');
+    } finally {
+      setSignupLoading(false);
     }
   };
 
@@ -75,6 +100,10 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
           <TouchableOpacity style={styles.button} onPress={handleLogin}>
             <Text style={styles.buttonText}>{loading ? 'Signing in...' : 'Log In'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={handleSignUp}>
+            <Text style={styles.secondaryButtonText}>{signupLoading ? 'Creating account...' : 'Create Account'}</Text>
           </TouchableOpacity>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -195,6 +224,20 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: '#2563eb',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: '#ffffff',
+  },
+  secondaryButtonText: {
+    color: '#2563eb',
+    fontWeight: '700',
+    fontSize: 15,
   },
   errorText: {
     marginTop: 12,

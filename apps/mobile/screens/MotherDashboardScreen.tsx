@@ -1,8 +1,19 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { type MotherStage } from '../lib/motherProfileStore';
+import {
+  fetchAppointments,
+  fetchChildrenProfiles,
+  fetchImmunizationData,
+  fetchMotherProfileDetails,
+  fetchRecords,
+  type MobileAppointment,
+  type MobileMotherProfileDetails,
+  type MobileRecord,
+  type MobileVaccine,
+} from '../lib/firestoreData';
 
 interface DashboardProps {
+  userEmail: string;
   userName: string;
   pregnancyWeek: number | null;
   nextAppointmentText: string | null;
@@ -11,15 +22,130 @@ interface DashboardProps {
 }
 
 export default function MotherDashboardScreen({
+  userEmail,
   userName,
   pregnancyWeek,
   nextAppointmentText,
   onNavigate,
   onLogout,
 }: DashboardProps) {
+  const isPrenatal = pregnancyWeek !== null;
   const weekLabel = pregnancyWeek ? `Week ${pregnancyWeek}` : 'Pregnancy tracking pending';
   const progressPercent = pregnancyWeek ? Math.min(Math.max((pregnancyWeek / 40) * 100, 0), 100) : 0;
   const progressWidth = `${progressPercent}%` as `${number}%`;
+  const [loadingInsights, setLoadingInsights] = useState(true);
+  const [profileDetails, setProfileDetails] = useState<MobileMotherProfileDetails | null>(null);
+  const [appointments, setAppointments] = useState<MobileAppointment[]>([]);
+  const [vaccines, setVaccines] = useState<MobileVaccine[]>([]);
+  const [records, setRecords] = useState<MobileRecord[]>([]);
+  const [childCount, setChildCount] = useState(0);
+
+  useEffect(() => {
+    async function loadInsights() {
+      try {
+        if (!userEmail) return;
+
+        const [details, appts, immunization, recs, children] = await Promise.all([
+          fetchMotherProfileDetails(userEmail.toLowerCase()),
+          fetchAppointments(userEmail.toLowerCase()),
+          fetchImmunizationData(userEmail.toLowerCase()),
+          fetchRecords(userEmail.toLowerCase()),
+          fetchChildrenProfiles(userEmail.toLowerCase()),
+        ]);
+
+        setProfileDetails(details);
+        setAppointments(appts);
+        setVaccines(immunization.vaccines);
+        setRecords(recs);
+        setChildCount(children.length || details?.childrenCount || 0);
+      } finally {
+        setLoadingInsights(false);
+      }
+    }
+
+    loadInsights();
+  }, [userEmail]);
+
+  const stageLabel = profileDetails?.stage === 'POSTNATAL' ? 'Postnatal' : 'Prenatal';
+
+  const nearestVisitLabel = useMemo(() => {
+    if (nextAppointmentText) return nextAppointmentText;
+    const today = new Date();
+    const upcoming = appointments
+      .map((item) => ({ item, date: new Date(item.date) }))
+      .filter(({ item, date }) => !Number.isNaN(date.getTime()) && item.status !== 'COMPLETED' && date >= today)
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    return upcoming[0]?.item.date || 'No upcoming visit';
+  }, [appointments, nextAppointmentText]);
+
+  const profileCompletion = useMemo(() => {
+    const checks = [
+      Boolean(profileDetails?.fullName),
+      Boolean(profileDetails?.phone),
+      Boolean(profileDetails?.motherCode),
+      Boolean(profileDetails?.county),
+      Boolean(profileDetails?.facility),
+      Boolean(profileDetails?.emergencyContactName),
+      Boolean(profileDetails?.emergencyContactPhone),
+      profileDetails?.stage === 'POSTNATAL' ? Boolean(profileDetails?.babyAgeMonths) : Boolean(profileDetails?.pregnancyWeek),
+    ];
+
+    const completed = checks.filter(Boolean).length;
+    return Math.round((completed / checks.length) * 100);
+  }, [profileDetails]);
+
+  const missingItems = useMemo(() => {
+    const items: string[] = [];
+    if (!profileDetails?.county) items.push('County');
+    if (!profileDetails?.facility) items.push('Facility');
+    if (!profileDetails?.emergencyContactName) items.push('Emergency contact name');
+    if (!profileDetails?.emergencyContactPhone) items.push('Emergency contact phone');
+    if (profileDetails?.stage === 'POSTNATAL' && !profileDetails?.babyAgeMonths) items.push('Baby age');
+    if (profileDetails?.stage !== 'POSTNATAL' && !profileDetails?.pregnancyWeek) items.push('Pregnancy week');
+    return items;
+  }, [profileDetails]);
+
+  const missedCount = useMemo(() => {
+    const now = new Date();
+    return appointments.filter((item) => {
+      const status = item.status.toUpperCase();
+      if (status === 'MISSED') return true;
+      const date = new Date(item.date);
+      return !Number.isNaN(date.getTime()) && date < now && status !== 'COMPLETED';
+    }).length;
+  }, [appointments]);
+
+  const dueSoonVaccines = useMemo(() => {
+    const now = new Date();
+    const deadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return vaccines.filter((item) => {
+      if (item.status === 'COMPLETED') return false;
+      const scheduled = new Date(item.scheduled);
+      if (Number.isNaN(scheduled.getTime())) return false;
+      return scheduled >= now && scheduled <= deadline;
+    }).length;
+  }, [vaccines]);
+
+  const bpRisk = useMemo(() => {
+    const highReadings = records.filter((item) => {
+      const match = item.bp.match(/(\d+)\D+(\d+)/);
+      if (!match) return false;
+      const systolic = Number.parseInt(match[1], 10);
+      const diastolic = Number.parseInt(match[2], 10);
+      return systolic >= 140 || diastolic >= 90;
+    }).length;
+
+    if (highReadings >= 2) {
+      return 'High BP pattern detected in multiple checkups. Please contact your clinic.';
+    }
+
+    if (highReadings === 1) {
+      return 'One high BP reading found. Keep monitoring and attend your next visit.';
+    }
+
+    return 'No blood pressure risk pattern detected from recent records.';
+  }, [records]);
 
   const menuItems = [
     {
@@ -49,6 +175,13 @@ export default function MotherDashboardScreen({
       icon: '🗓️',
       title: 'Schedule',
       desc: 'Clinic visit timeline',
+    },
+    {
+      screen: 'TIMELINE',
+      color: '#0ea5e9',
+      icon: '🧭',
+      title: 'Timeline',
+      desc: 'All care events in one feed',
     },
     {
       screen: 'MILESTONES',
@@ -99,6 +232,21 @@ export default function MotherDashboardScreen({
         </TouchableOpacity>
       </View>
 
+      <View style={styles.statusStrip}>
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillLabel}>Next Visit</Text>
+          <Text style={styles.statusPillValue}>{nearestVisitLabel}</Text>
+        </View>
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillLabel}>Stage</Text>
+          <Text style={styles.statusPillValue}>{stageLabel}</Text>
+        </View>
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillLabel}>Children</Text>
+          <Text style={styles.statusPillValue}>{childCount}</Text>
+        </View>
+      </View>
+
       {/* Pregnancy Status Card */}
       <View style={styles.statusCard}>
         <Text style={styles.cardTag}>PREGNANCY STATUS</Text>
@@ -114,6 +262,30 @@ export default function MotherDashboardScreen({
           <Text style={styles.progressLabelText}>{Math.round(progressPercent)}%</Text>
           <Text style={styles.progressLabelText}>{isPrenatal ? 'Due Date' : 'Infant Follow-up'}</Text>
         </View>
+      </View>
+
+      <View style={styles.infoCard}>
+        <Text style={styles.infoCardTitle}>Profile Completion</Text>
+        <Text style={styles.infoCardBody}>{profileCompletion}% completed</Text>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressBar, { width: `${profileCompletion}%` as `${number}%` }]} />
+        </View>
+        <Text style={styles.infoCardHint}>
+          {missingItems.length > 0 ? `Missing: ${missingItems.join(', ')}` : 'Profile details are complete.'}
+        </Text>
+      </View>
+
+      <View style={styles.infoCard}>
+        <Text style={styles.infoCardTitle}>Smart Reminders</Text>
+        <Text style={styles.infoCardBody}>Missed follow-ups: {missedCount}</Text>
+        <Text style={styles.infoCardBody}>Vaccines due in 7 days: {dueSoonVaccines}</Text>
+        <Text style={styles.infoCardHint}>Tap Timeline for full event history.</Text>
+      </View>
+
+      <View style={styles.infoCard}>
+        <Text style={styles.infoCardTitle}>Risk Flags</Text>
+        <Text style={styles.infoCardBody}>{bpRisk}</Text>
+        {loadingInsights ? <Text style={styles.infoCardHint}>Analyzing latest records...</Text> : null}
       </View>
 
       {/* Quick Action Grid */}
@@ -197,6 +369,31 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 28,
   },
+  statusStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    gap: 8,
+  },
+  statusPill: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d8e2ef',
+    borderRadius: 12,
+    padding: 10,
+  },
+  statusPillLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  statusPillValue: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   cardTag: {
     color: '#2563eb',
     fontSize: 11,
@@ -245,6 +442,30 @@ const styles = StyleSheet.create({
   progressLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  infoCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d8e2ef',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  infoCardTitle: {
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  infoCardBody: {
+    color: '#334155',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  infoCardHint: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 4,
   },
   progressLabelText: {
     color: '#334155',

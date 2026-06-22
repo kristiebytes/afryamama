@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -24,6 +26,26 @@ interface MotherProfileSetupScreenProps {
 
 const STAGE_OPTIONS: MotherStage[] = ['PRENATAL', 'POSTNATAL'];
 const MULTIPLE_BIRTH_OPTIONS: MultipleBirthType[] = ['SINGLE', 'TWINS', 'TRIPLETS'];
+const SEX_OPTIONS = [
+  { label: 'Select sex', value: '' },
+  { label: 'Female', value: 'Female' },
+  { label: 'Male', value: 'Male' },
+  { label: 'Other', value: 'Other' },
+];
+
+function formatDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDate(value: string): Date {
+  if (!value.trim()) return new Date();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return new Date();
+  return parsed;
+}
 
 function childCountFromType(multipleBirthType: MultipleBirthType): number {
   if (multipleBirthType === 'TWINS') return 2;
@@ -59,6 +81,8 @@ export default function MotherProfileSetupScreen({
   const [facility, setFacility] = useState('');
   const [emergencyContactName, setEmergencyContactName] = useState('');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
+  const [datePickerChildIndex, setDatePickerChildIndex] = useState<number | null>(null);
+  const [datePickerValue, setDatePickerValue] = useState<Date>(new Date());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -84,6 +108,31 @@ export default function MotherProfileSetupScreen({
     setChildren((current) =>
       current.map((child, idx) => (idx === index ? { ...child, [field]: value } : child))
     );
+  }
+
+  function openBirthDatePicker(index: number, currentValue: string) {
+    setDatePickerChildIndex(index);
+    setDatePickerValue(parseDate(currentValue));
+  }
+
+  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+    const activeIndex = datePickerChildIndex;
+
+    if (event.type === 'dismissed') {
+      setDatePickerChildIndex(null);
+      return;
+    }
+
+    if (selectedDate) {
+      setDatePickerValue(selectedDate);
+      if (activeIndex !== null) {
+        updateChildField(activeIndex, 'birthDate', formatDate(selectedDate));
+      }
+    }
+
+    if (Platform.OS !== 'ios') {
+      setDatePickerChildIndex(null);
+    }
   }
 
   async function handleSave() {
@@ -245,22 +294,26 @@ export default function MotherProfileSetupScreen({
                   />
 
                   <Text style={styles.label}>Sex</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={child.sex}
-                    onChangeText={(value) => updateChildField(index, 'sex', value)}
-                    placeholder="Male / Female"
-                    placeholderTextColor="#94a3b8"
-                  />
+                  <View style={styles.pickerWrapper}>
+                    <Picker
+                      selectedValue={child.sex}
+                      onValueChange={(value) => updateChildField(index, 'sex', String(value))}
+                    >
+                      {SEX_OPTIONS.map((option) => (
+                        <Picker.Item key={option.value || 'empty'} label={option.label} value={option.value} />
+                      ))}
+                    </Picker>
+                  </View>
 
                   <Text style={styles.label}>Date of Birth</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={child.birthDate}
-                    onChangeText={(value) => updateChildField(index, 'birthDate', value)}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#94a3b8"
-                  />
+                  <TouchableOpacity
+                    style={styles.inputPressable}
+                    onPress={() => openBirthDatePicker(index, child.birthDate)}
+                  >
+                    <Text style={child.birthDate ? styles.inputPressableText : styles.inputPlaceholderText}>
+                      {child.birthDate || 'Select date'}
+                    </Text>
+                  </TouchableOpacity>
 
                   <Text style={styles.label}>Birth Weight (kg)</Text>
                   <TextInput
@@ -275,6 +328,23 @@ export default function MotherProfileSetupScreen({
               ))}
             </>
           )}
+
+          {datePickerChildIndex !== null ? (
+            <View style={styles.datePickerContainer}>
+              <DateTimePicker
+                value={datePickerValue}
+                mode="date"
+                display="default"
+                maximumDate={new Date()}
+                onChange={handleDateChange}
+              />
+              {Platform.OS === 'ios' ? (
+                <TouchableOpacity style={styles.dateDoneButton} onPress={() => setDatePickerChildIndex(null)}>
+                  <Text style={styles.dateDoneButtonText}>Done</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
 
           <Text style={styles.label}>County *</Text>
           <TextInput style={styles.input} value={county} onChangeText={setCounty} placeholder="Nairobi" placeholderTextColor="#94a3b8" />
@@ -379,6 +449,47 @@ const styles = StyleSheet.create({
     padding: 12,
     color: '#0f172a',
     fontSize: 15,
+  },
+  pickerWrapper: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  inputPressable: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  inputPressableText: {
+    color: '#0f172a',
+    fontSize: 15,
+  },
+  inputPlaceholderText: {
+    color: '#94a3b8',
+    fontSize: 15,
+  },
+  datePickerContainer: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#d8e2ef',
+    borderRadius: 12,
+    padding: 8,
+    backgroundColor: '#ffffff',
+  },
+  dateDoneButton: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  dateDoneButtonText: {
+    color: '#2563eb',
+    fontSize: 13,
+    fontWeight: '700',
   },
   stageRow: {
     flexDirection: 'row',
