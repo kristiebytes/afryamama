@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { fetchImmunizationData, type MobileVaccine } from '../lib/firestoreData';
+import { fetchImmunizationData, type MobileChildProfile, type MobileVaccine } from '../lib/firestoreData';
 
 interface ImmunizationProps {
   email: string;
@@ -9,8 +9,8 @@ interface ImmunizationProps {
 
 export default function ImmunizationScreen({ email, onBack }: ImmunizationProps) {
   const [loading, setLoading] = useState(true);
-  const [childName, setChildName] = useState('Child Profile');
-  const [childBirth, setChildBirth] = useState('Birth date not set');
+  const [children, setChildren] = useState<MobileChildProfile[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [vaccines, setVaccines] = useState<MobileVaccine[]>([]);
 
   useEffect(() => {
@@ -21,11 +21,9 @@ export default function ImmunizationScreen({ email, onBack }: ImmunizationProps)
           return;
         }
 
-        const payload = await fetchImmunizationData(email.toLowerCase());
-        if (payload.child) {
-          setChildName(payload.child.childName);
-          setChildBirth(payload.child.childBirth);
-        }
+        const payload = await fetchImmunizationData(email.toLowerCase(), selectedChildId || undefined);
+        setChildren(payload.children);
+        setSelectedChildId(payload.selectedChildId);
         setVaccines(payload.vaccines);
       } finally {
         setLoading(false);
@@ -33,7 +31,9 @@ export default function ImmunizationScreen({ email, onBack }: ImmunizationProps)
     }
 
     loadImmunization();
-  }, [email]);
+  }, [email, selectedChildId]);
+
+  const selectedChild = children.find((item) => item.id === selectedChildId) || null;
 
   return (
     <View style={styles.container}>
@@ -51,11 +51,28 @@ export default function ImmunizationScreen({ email, onBack }: ImmunizationProps)
           <Text style={styles.heroText}>Stay ahead of each vaccine dose and keep your baby fully protected.</Text>
         </View>
 
+        {children.length > 1 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.switcherRow}>
+            {children.map((child) => {
+              const active = child.id === selectedChildId;
+              return (
+                <TouchableOpacity
+                  key={child.id}
+                  style={[styles.switcherChip, active ? styles.switcherChipActive : null]}
+                  onPress={() => setSelectedChildId(child.id)}
+                >
+                  <Text style={[styles.switcherChipText, active ? styles.switcherChipTextActive : null]}>{child.childName}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
         <View style={styles.childHeaderCard}>
           <Text style={styles.childIcon}>👶</Text>
           <View>
-            <Text style={styles.childName}>{childName}</Text>
-            <Text style={styles.childBirth}>Born: {childBirth}</Text>
+            <Text style={styles.childName}>{selectedChild?.childName || 'Child Profile'}</Text>
+            <Text style={styles.childBirth}>Born: {selectedChild?.childBirth || 'Birth date not set'}</Text>
           </View>
         </View>
 
@@ -172,6 +189,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 2,
+  },
+  switcherRow: {
+    gap: 8,
+    paddingBottom: 10,
+  },
+  switcherChip: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  switcherChipActive: {
+    borderColor: '#16a34a',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+  },
+  switcherChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  switcherChipTextActive: {
+    color: '#047857',
   },
   childIcon: {
     fontSize: 32,

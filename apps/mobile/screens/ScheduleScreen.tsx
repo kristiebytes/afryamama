@@ -59,6 +59,12 @@ export default function ScheduleScreen({ email, onBack }: ScheduleScreenProps) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>CARE TIMELINE</Text>
+          <Text style={styles.heroTitle}>My Schedule</Text>
+          <Text style={styles.heroText}>Review upcoming visits and follow completed care checkpoints.</Text>
+        </View>
+
         {loading ? <Text style={styles.emptyText}>Loading schedule...</Text> : null}
 
         {!loading ? (
@@ -78,7 +84,7 @@ export default function ScheduleScreen({ email, onBack }: ScheduleScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
     paddingTop: 48,
   },
   header: {
@@ -87,26 +93,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#243049',
+    borderBottomColor: '#d8e2ef',
+    backgroundColor: '#ffffff',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#a78bfa',
+    color: '#2563eb',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 20,
     fontWeight: '700',
   },
   content: {
     padding: 24,
   },
+  heroCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#c7d7ef',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+  },
+  heroTag: {
+    color: '#a78bfa',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  heroTitle: {
+    color: '#0f172a',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  heroText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 2,
+  },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 15,
     fontWeight: '700',
     marginBottom: 10,
@@ -118,21 +152,21 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   card: {
-    backgroundColor: '#121826',
-    borderColor: '#243049',
+    backgroundColor: '#ffffff',
+    borderColor: '#d8e2ef',
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
   cardTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 15,
     fontWeight: '700',
     marginBottom: 4,
   },
   cardMeta: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 13,
     marginBottom: 2,
   },

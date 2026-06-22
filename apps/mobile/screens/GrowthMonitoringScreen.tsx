@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
-import { fetchGrowthMonitoring, type MobileGrowthPoint } from '../lib/firestoreData';
+import { fetchChildrenProfiles, fetchGrowthMonitoring, type MobileChildProfile, type MobileGrowthPoint } from '../lib/firestoreData';
 
 interface GrowthMonitoringScreenProps {
   email: string;
@@ -15,6 +15,8 @@ function toNumeric(value: string): number {
 
 export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitoringScreenProps) {
   const [loading, setLoading] = useState(true);
+  const [children, setChildren] = useState<MobileChildProfile[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [rows, setRows] = useState<MobileGrowthPoint[]>([]);
 
   useEffect(() => {
@@ -25,7 +27,11 @@ export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitori
           return;
         }
 
-        const items = await fetchGrowthMonitoring(email.toLowerCase());
+        const loadedChildren = await fetchChildrenProfiles(email.toLowerCase());
+        const activeChildId = selectedChildId || loadedChildren[0]?.id || null;
+        const items = await fetchGrowthMonitoring(email.toLowerCase(), activeChildId || undefined);
+        setChildren(loadedChildren);
+        setSelectedChildId(activeChildId);
         setRows(items);
       } finally {
         setLoading(false);
@@ -33,7 +39,7 @@ export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitori
     }
 
     loadGrowthRows();
-  }, [email]);
+  }, [email, selectedChildId]);
 
   const maxWeight = useMemo(() => {
     if (rows.length === 0) return 0;
@@ -50,6 +56,29 @@ export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitori
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>CHILD METRICS</Text>
+          <Text style={styles.heroTitle}>Growth Monitoring</Text>
+          <Text style={styles.heroText}>Follow weight and size trends over time to spot healthy progress early.</Text>
+        </View>
+
+        {children.length > 1 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.switcherRow}>
+            {children.map((child) => {
+              const active = child.id === selectedChildId;
+              return (
+                <TouchableOpacity
+                  key={child.id}
+                  style={[styles.switcherChip, active ? styles.switcherChipActive : null]}
+                  onPress={() => setSelectedChildId(child.id)}
+                >
+                  <Text style={[styles.switcherChipText, active ? styles.switcherChipTextActive : null]}>{child.childName}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
         {loading ? <Text style={styles.emptyText}>Loading growth data...</Text> : null}
 
         {!loading && rows.length === 0 ? (
@@ -81,7 +110,7 @@ export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitori
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
     paddingTop: 48,
   },
   header: {
@@ -90,32 +119,83 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#243049',
+    borderBottomColor: '#d8e2ef',
+    backgroundColor: '#ffffff',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#34d399',
+    color: '#2563eb',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 20,
     fontWeight: '700',
   },
   content: {
     padding: 24,
   },
+  heroCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#c7d7ef',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+  },
+  heroTag: {
+    color: '#34d399',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  heroTitle: {
+    color: '#0f172a',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  heroText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   emptyText: {
     color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },
+  switcherRow: {
+    gap: 8,
+    paddingBottom: 10,
+  },
+  switcherChip: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  switcherChipActive: {
+    borderColor: '#34d399',
+    backgroundColor: 'rgba(52, 211, 153, 0.14)',
+  },
+  switcherChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  switcherChipTextActive: {
+    color: '#047857',
+  },
   card: {
-    backgroundColor: '#121826',
-    borderColor: '#243049',
+    backgroundColor: '#ffffff',
+    borderColor: '#d8e2ef',
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
@@ -128,7 +208,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   date: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -140,7 +220,7 @@ const styles = StyleSheet.create({
   track: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: '#1f2a40',
+    backgroundColor: '#e2e8f0',
     overflow: 'hidden',
     marginBottom: 8,
   },
@@ -150,7 +230,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   meta: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 12,
     marginBottom: 2,
   },

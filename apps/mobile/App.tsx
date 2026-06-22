@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // Import screens
 import LoginScreen from './screens/LoginScreen';
@@ -12,12 +11,20 @@ import RecordsScreen from './screens/RecordsScreen';
 import ImmunizationScreen from './screens/ImmunizationScreen';
 import WellnessTipsScreen from './screens/WellnessTipsScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import MotherProfileSetupScreen from './screens/MotherProfileSetupScreen';
 import ScheduleScreen from './screens/ScheduleScreen';
+import TimelineScreen from './screens/TimelineScreen';
 import MilestonesScreen from './screens/MilestonesScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import GrowthMonitoringScreen from './screens/GrowthMonitoringScreen';
 import { firebaseAuth } from './lib/firebaseClient';
-import { loadMotherProfile, loginWithFirebase, loginWithMotherCollection, logoutFromFirebase } from './lib/firebaseAuth';
+import {
+  loadMotherProfile,
+  loginWithFirebase,
+  logoutFromFirebase,
+  signUpMotherWithFirebase,
+} from './lib/firebaseAuth';
+import { saveMotherProfile } from './lib/motherProfileStore';
 
 type Screen =
   | 'LOGIN'
@@ -26,8 +33,10 @@ type Screen =
   | 'RECORDS'
   | 'IMMUNIZATION'
   | 'WELLNESS'
+  | 'PROFILE_SETUP'
   | 'PROFILE'
   | 'SCHEDULE'
+  | 'TIMELINE'
   | 'MILESTONES'
   | 'NOTIFICATIONS'
   | 'GROWTH';
@@ -38,6 +47,7 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string>('');
   const [pregnancyWeek, setPregnancyWeek] = useState<number | null>(null);
   const [nextAppointmentText, setNextAppointmentText] = useState<string | null>(null);
+  const redirectToProfileAfterSignUpRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
@@ -55,28 +65,25 @@ export default function App() {
       setUserEmail(user.email || '');
       setPregnancyWeek(profile.pregnancyWeek);
       setNextAppointmentText(profile.nextAppointmentText);
-      setCurrentScreen('DASHBOARD');
+
+      if (redirectToProfileAfterSignUpRef.current) {
+        redirectToProfileAfterSignUpRef.current = false;
+        setCurrentScreen('PROFILE_SETUP');
+      } else {
+        setCurrentScreen('DASHBOARD');
+      }
     });
 
     return () => unsubscribe();
   }, []);
 
   const handleLoginSuccess = async (email: string, password: string) => {
-    try {
-      await loginWithFirebase(email, password);
-      return;
-    } catch {
-      const fallbackProfile = await loginWithMotherCollection(email, password);
-      if (!fallbackProfile) {
-        throw new Error('Invalid credentials.');
-      }
+    await loginWithFirebase(email, password);
+  };
 
-      setUserEmail(email.trim().toLowerCase());
-      setUserName(fallbackProfile.displayName);
-      setPregnancyWeek(fallbackProfile.pregnancyWeek);
-      setNextAppointmentText(fallbackProfile.nextAppointmentText);
-      setCurrentScreen('DASHBOARD');
-    }
+  const handleSignUpSuccess = async (email: string, password: string) => {
+    redirectToProfileAfterSignUpRef.current = true;
+    await signUpMotherWithFirebase(email, password);
   };
 
   const handleLogout = async () => {
@@ -88,21 +95,24 @@ export default function App() {
     setCurrentScreen('LOGIN');
   };
 
+  const handleCompleteProfileSetup = async (profile: Parameters<typeof saveMotherProfile>[0]) => {
+    await saveMotherProfile(profile);
+    setCurrentScreen('DASHBOARD');
+  };
+
   const renderScreen = () => {
     switch (currentScreen) {
       case 'LOGIN':
-        return <LoginScreen onLoginSuccess={(email) => handleLoginSuccess(email)} />;
-      case 'PROFILE_SETUP':
         return (
-          <MotherProfileSetupScreen
-            email={currentEmail}
-            onBackToLogin={() => setCurrentScreen('LOGIN')}
-            onComplete={handleProfileComplete}
+          <LoginScreen
+            onLoginSuccess={handleLoginSuccess}
+            onSignUpSuccess={handleSignUpSuccess}
           />
         );
       case 'DASHBOARD':
         return (
           <MotherDashboardScreen
+            userEmail={userEmail}
             userName={userName}
             pregnancyWeek={pregnancyWeek}
             nextAppointmentText={nextAppointmentText}
@@ -110,19 +120,22 @@ export default function App() {
             onLogout={handleLogout}
           />
         );
-      case 'PROFILE':
+      case 'PROFILE_SETUP':
         return (
-          <ProfileScreen
-            profile={motherProfile}
-            onBack={() => setCurrentScreen('DASHBOARD')}
-            onSaveProfile={handleProfileUpdate}
-            onDeleteAccount={handleDeleteAccount}
+          <MotherProfileSetupScreen
+            email={userEmail}
+            onBackToLogin={handleLogout}
+            onComplete={handleCompleteProfileSetup}
           />
         );
+      case 'PROFILE':
+        return <ProfileScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'SCHEDULE':
-        return <ScheduleScreen email={currentEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
+        return <ScheduleScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
+      case 'TIMELINE':
+        return <TimelineScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'MILESTONES':
-        return <MilestonesScreen email={currentEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
+        return <MilestonesScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'APPOINTMENTS':
         return <AppointmentsScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'RECORDS':
@@ -131,37 +144,32 @@ export default function App() {
         return <ImmunizationScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'WELLNESS':
         return <WellnessTipsScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
-      case 'PROFILE':
-        return <ProfileScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
-      case 'SCHEDULE':
-        return <ScheduleScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
-      case 'MILESTONES':
-        return <MilestonesScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'NOTIFICATIONS':
         return <NotificationsScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'GROWTH':
         return <GrowthMonitoringScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       default:
-        return <LoginScreen onLoginSuccess={(email) => handleLoginSuccess(email)} />;
+        return (
+          <LoginScreen
+            onLoginSuccess={handleLoginSuccess}
+            onSignUpSuccess={handleSignUpSuccess}
+          />
+        );
     }
   };
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="light" />
-        <View style={styles.wrapper}>
-          {renderScreen()}
-        </View>
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="dark" />
+      <View style={styles.wrapper}>{renderScreen()}</View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
   },
   wrapper: {
     flex: 1,

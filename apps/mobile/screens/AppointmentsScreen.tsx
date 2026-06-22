@@ -52,12 +52,6 @@ export default function AppointmentsScreen({ email, onBack }: AppointmentsProps)
         {!loading && appointments.length === 0 ? (
           <Text style={styles.emptyText}>No appointments available for this mother profile yet.</Text>
         ) : null}
-        
-        {loading ? <Text style={styles.emptyText}>Loading appointments...</Text> : null}
-
-        {!loading && appointments.length === 0 ? (
-          <Text style={styles.emptyText}>No appointments found in your Firestore records.</Text>
-        ) : null}
 
         {appointments.map((appt) => (
           <View style={styles.apptCard} key={appt.id}>
