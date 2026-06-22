@@ -1,19 +1,44 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  getMotherImmunizationProfile,
+  getMotherVaccines,
+  type MotherImmunizationProfile,
+  type MotherVaccine,
+} from '../lib/motherDataStore';
 
 interface ImmunizationProps {
+  email: string;
   onBack: () => void;
 }
 
-export default function ImmunizationScreen({ onBack }: ImmunizationProps) {
-  const vaccines = [
-    { id: 'v-1', name: 'BCG (Tuberculosis)', scheduled: 'At birth', administered: 'Oct 02, 2025', status: 'COMPLETED' },
-    { id: 'v-2', name: 'OPV 0 (Polio)', scheduled: 'At birth', administered: 'Oct 02, 2025', status: 'COMPLETED' },
-    { id: 'v-3', name: 'Pentavalent 1 (DPT, HepB, Hib)', scheduled: '6 Weeks', administered: 'Nov 12, 2025', status: 'COMPLETED' },
-    { id: 'v-4', name: 'OPV 1 (Polio oral dose)', scheduled: '6 Weeks', administered: 'Nov 12, 2025', status: 'COMPLETED' },
-    { id: 'v-5', name: 'Pentavalent 2', scheduled: '10 Weeks', administered: 'Dec 18, 2025', status: 'COMPLETED' },
-    { id: 'v-6', name: 'Measles-Rubella 1', scheduled: '9 Months', administered: undefined, status: 'PENDING' }
-  ];
+export default function ImmunizationScreen({ email, onBack }: ImmunizationProps) {
+  const [loading, setLoading] = useState(true);
+  const [childProfile, setChildProfile] = useState<MotherImmunizationProfile | null>(null);
+  const [vaccines, setVaccines] = useState<MotherVaccine[]>([]);
+
+  useEffect(() => {
+    async function loadRows() {
+      try {
+        if (!email) {
+          setChildProfile(null);
+          setVaccines([]);
+          return;
+        }
+
+        const [profile, rows] = await Promise.all([
+          getMotherImmunizationProfile(email),
+          getMotherVaccines(email),
+        ]);
+        setChildProfile(profile);
+        setVaccines(rows);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRows();
+  }, [email]);
 
   return (
     <View style={styles.container}>
@@ -25,15 +50,27 @@ export default function ImmunizationScreen({ onBack }: ImmunizationProps) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>CHILD PROTECTION</Text>
+          <Text style={styles.heroTitle}>Immunizations</Text>
+          <Text style={styles.heroText}>Stay ahead of each vaccine dose and keep your baby fully protected.</Text>
+        </View>
+
         <View style={styles.childHeaderCard}>
           <Text style={styles.childIcon}>👶</Text>
           <View>
-            <Text style={styles.childName}>Baby Baraka</Text>
-            <Text style={styles.childBirth}>Born: Oct 01, 2025 • Male</Text>
+            <Text style={styles.childName}>{childProfile?.childName || 'Child profile not set'}</Text>
+            <Text style={styles.childBirth}>{childProfile?.childBirth || 'Birth details not available'}</Text>
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>Immunization Schedule</Text>
+
+        {loading ? <Text style={styles.emptyText}>Loading immunizations...</Text> : null}
+
+        {!loading && vaccines.length === 0 ? (
+          <Text style={styles.emptyText}>No immunization entries available yet.</Text>
+        ) : null}
 
         {vaccines.map((v) => (
           <View style={styles.vaccineRow} key={v.id}>
@@ -66,7 +103,7 @@ export default function ImmunizationScreen({ onBack }: ImmunizationProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
     paddingTop: 48,
   },
   header: {
@@ -75,61 +112,103 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#243049',
+    borderBottomColor: '#d8e2ef',
+    backgroundColor: '#ffffff',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#10b981',
+    color: '#2563eb',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 20,
     fontWeight: '700',
   },
   content: {
     padding: 24,
   },
-  childHeaderCard: {
-    backgroundColor: '#121826',
+  heroCard: {
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#c7d7ef',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  heroTag: {
+    color: '#16a34a',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  heroTitle: {
+    color: '#0f172a',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  heroText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  childHeaderCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d8e2ef',
     borderRadius: 16,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
     marginBottom: 28,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   childIcon: {
     fontSize: 32,
   },
   childName: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 18,
     fontWeight: '700',
   },
   childBirth: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 13,
     marginTop: 2,
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 16,
+  },
+  emptyText: {
+    color: '#64748b',
+    fontSize: 13,
+    marginBottom: 12,
   },
   vaccineRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#121826',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#d8e2ef',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -138,12 +217,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   vaccineName: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 15,
     fontWeight: '600',
   },
   vaccineSchedule: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 12,
     marginTop: 4,
   },
