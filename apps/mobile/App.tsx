@@ -91,7 +91,15 @@ export default function App() {
   const renderScreen = () => {
     switch (currentScreen) {
       case 'LOGIN':
-        return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+        return <LoginScreen onLoginSuccess={(email) => handleLoginSuccess(email)} />;
+      case 'PROFILE_SETUP':
+        return (
+          <MotherProfileSetupScreen
+            email={currentEmail}
+            onBackToLogin={() => setCurrentScreen('LOGIN')}
+            onComplete={handleProfileComplete}
+          />
+        );
       case 'DASHBOARD':
         return (
           <MotherDashboardScreen
@@ -102,6 +110,19 @@ export default function App() {
             onLogout={handleLogout}
           />
         );
+      case 'PROFILE':
+        return (
+          <ProfileScreen
+            profile={motherProfile}
+            onBack={() => setCurrentScreen('DASHBOARD')}
+            onSaveProfile={handleProfileUpdate}
+            onDeleteAccount={handleDeleteAccount}
+          />
+        );
+      case 'SCHEDULE':
+        return <ScheduleScreen email={currentEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
+      case 'MILESTONES':
+        return <MilestonesScreen email={currentEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'APPOINTMENTS':
         return <AppointmentsScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'RECORDS':
@@ -121,7 +142,7 @@ export default function App() {
       case 'GROWTH':
         return <GrowthMonitoringScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       default:
-        return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+        return <LoginScreen onLoginSuccess={(email) => handleLoginSuccess(email)} />;
     }
   };
 

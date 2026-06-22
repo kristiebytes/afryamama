@@ -45,6 +45,12 @@ export default function ImmunizationScreen({ email, onBack }: ImmunizationProps)
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>CHILD PROTECTION</Text>
+          <Text style={styles.heroTitle}>Immunizations</Text>
+          <Text style={styles.heroText}>Stay ahead of each vaccine dose and keep your baby fully protected.</Text>
+        </View>
+
         <View style={styles.childHeaderCard}>
           <Text style={styles.childIcon}>👶</Text>
           <View>
@@ -92,7 +98,7 @@ export default function ImmunizationScreen({ email, onBack }: ImmunizationProps)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
     paddingTop: 48,
   },
   header: {
@@ -101,50 +107,87 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#243049',
+    borderBottomColor: '#d8e2ef',
+    backgroundColor: '#ffffff',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#10b981',
+    color: '#2563eb',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 20,
     fontWeight: '700',
   },
   content: {
     padding: 24,
   },
-  childHeaderCard: {
-    backgroundColor: '#121826',
+  heroCard: {
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#c7d7ef',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  heroTag: {
+    color: '#16a34a',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  heroTitle: {
+    color: '#0f172a',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  heroText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  childHeaderCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d8e2ef',
     borderRadius: 16,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
     marginBottom: 28,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   childIcon: {
     fontSize: 32,
   },
   childName: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 18,
     fontWeight: '700',
   },
   childBirth: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 13,
     marginTop: 2,
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 16,
@@ -158,9 +201,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#121826',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#d8e2ef',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -169,12 +212,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   vaccineName: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 15,
     fontWeight: '600',
   },
   vaccineSchedule: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 12,
     marginTop: 4,
   },

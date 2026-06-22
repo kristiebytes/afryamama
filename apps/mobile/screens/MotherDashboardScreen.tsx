@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { type MotherStage } from '../lib/motherProfileStore';
 
 interface DashboardProps {
   userName: string;
@@ -90,7 +91,7 @@ export default function MotherDashboardScreen({
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.welcomeText}>Jambo,</Text>
+          <Text style={styles.welcomeText}>Welcome back,</Text>
           <Text style={styles.nameText}>{userName} 👋</Text>
         </View>
         <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
@@ -109,14 +110,14 @@ export default function MotherDashboardScreen({
           <View style={[styles.progressBar, { width: progressWidth }]} />
         </View>
         <View style={styles.progressLabels}>
-          <Text style={styles.progressLabelText}>Conception</Text>
-          <Text style={styles.progressLabelText}>52%</Text>
-          <Text style={styles.progressLabelText}>Due Date</Text>
+          <Text style={styles.progressLabelText}>{isPrenatal ? 'Conception' : 'Delivery'}</Text>
+          <Text style={styles.progressLabelText}>{Math.round(progressPercent)}%</Text>
+          <Text style={styles.progressLabelText}>{isPrenatal ? 'Due Date' : 'Infant Follow-up'}</Text>
         </View>
       </View>
 
       {/* Quick Action Grid */}
-      <Text style={styles.sectionTitle}>Maternal Care Menu</Text>
+      <Text style={styles.sectionTitle}>Mother Services</Text>
       <View style={styles.grid}>
         {menuItems.map((item) => (
           <TouchableOpacity
@@ -137,7 +138,7 @@ export default function MotherDashboardScreen({
       <View style={styles.alertBox}>
         <View style={styles.alertHeader}>
           <Text style={styles.alertHeaderIcon}>🔔</Text>
-          <Text style={styles.alertHeaderTitle}>Upcoming Prenatal Visit</Text>
+          <Text style={styles.alertHeaderTitle}>Next Care Reminder</Text>
         </View>
         <Text style={styles.alertText}>
           {nextAppointmentText
@@ -152,7 +153,7 @@ export default function MotherDashboardScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
   },
   contentContainer: {
     padding: 24,
@@ -165,12 +166,12 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   welcomeText: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 16,
     fontWeight: '500',
   },
   nameText: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 24,
     fontWeight: '700',
     marginTop: 2,
@@ -180,49 +181,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ef4444',
+    borderColor: '#dc2626',
+    backgroundColor: '#ffffff',
   },
   logoutText: {
-    color: '#ef4444',
+    color: '#dc2626',
     fontSize: 13,
     fontWeight: '600',
   },
   statusCard: {
-    backgroundColor: '#121826',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#d8e2ef',
     borderRadius: 20,
     padding: 20,
     marginBottom: 28,
   },
   cardTag: {
-    color: '#ec4899',
+    color: '#2563eb',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 8,
   },
   cardHeader: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 32,
     fontWeight: '800',
     marginBottom: 4,
   },
   cardSub: {
-    color: '#94a3b8',
+    color: '#475569',
     fontSize: 13,
-    marginBottom: 16,
+    marginBottom: 10,
+  },
+  codeBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 12,
+  },
+  codeBadgeText: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '700',
   },
   progressTrack: {
     height: 10,
-    backgroundColor: '#182235',
+    backgroundColor: '#e2e8f0',
     borderRadius: 5,
     overflow: 'hidden',
     marginBottom: 8,
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#ec4899',
+    backgroundColor: '#2563eb',
     borderRadius: 5,
   },
   progressLabels: {
@@ -230,12 +247,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   progressLabelText: {
-    color: '#64748b',
+    color: '#334155',
     fontSize: 11,
     fontWeight: '600',
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
@@ -248,12 +265,17 @@ const styles = StyleSheet.create({
   },
   gridCard: {
     width: '48%',
-    backgroundColor: '#121826',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#d8e2ef',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   gridIconBg: {
     width: 40,
@@ -267,19 +289,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   gridTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
   },
   gridDesc: {
-    color: '#64748b',
+    color: '#475569',
     fontSize: 12,
   },
   alertBox: {
-    backgroundColor: '#182235',
+    backgroundColor: '#ffffff',
     borderLeftWidth: 4,
-    borderLeftColor: '#8b5cf6',
+    borderLeftColor: '#2563eb',
     padding: 16,
     borderRadius: 12,
   },
@@ -293,12 +315,12 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   alertHeaderTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 14,
     fontWeight: '700',
   },
   alertText: {
-    color: '#94a3b8',
+    color: '#475569',
     fontSize: 13,
     lineHeight: 18,
   },

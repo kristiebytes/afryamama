@@ -39,7 +39,19 @@ export default function AppointmentsScreen({ email, onBack }: AppointmentsProps)
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>CARE PLANNER</Text>
+          <Text style={styles.heroTitle}>Appointments</Text>
+          <Text style={styles.heroText}>Track upcoming visits and follow through on maternal care timelines.</Text>
+        </View>
+
         <Text style={styles.sectionTitle}>Upcoming Consultations</Text>
+
+        {loading ? <Text style={styles.emptyText}>Loading appointments...</Text> : null}
+
+        {!loading && appointments.length === 0 ? (
+          <Text style={styles.emptyText}>No appointments available for this mother profile yet.</Text>
+        ) : null}
         
         {loading ? <Text style={styles.emptyText}>Loading appointments...</Text> : null}
 
@@ -66,8 +78,8 @@ export default function AppointmentsScreen({ email, onBack }: AppointmentsProps)
             </View>
 
             <View style={styles.cardBody}>
-              <Text style={styles.doctorName}>Provider: {appt.doctor}</Text>
-              <Text style={styles.reason}>Reason: {appt.reason}</Text>
+              <Text style={styles.doctorName}>👩‍⚕️ Provider: {appt.doctor}</Text>
+              <Text style={styles.reason}>📌 Reason: {appt.reason}</Text>
             </View>
           </View>
         ))}
@@ -83,7 +95,7 @@ export default function AppointmentsScreen({ email, onBack }: AppointmentsProps)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
     paddingTop: 48,
   },
   header: {
@@ -92,18 +104,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#243049',
+    borderBottomColor: '#d8e2ef',
+    backgroundColor: '#ffffff',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#8b5cf6',
+    color: '#2563eb',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -111,7 +124,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 16,
@@ -122,29 +135,34 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   apptCard: {
-    backgroundColor: '#121826',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#d8e2ef',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     borderBottomWidth: 1,
-    borderBottomColor: '#182235',
+    borderBottomColor: '#e2e8f0',
     paddingBottom: 12,
     marginBottom: 12,
   },
   apptDate: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 16,
     fontWeight: '700',
   },
   apptTime: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 13,
     marginTop: 2,
   },
@@ -178,16 +196,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   doctorName: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 14,
     fontWeight: '600',
   },
   reason: {
-    color: '#94a3b8',
+    color: '#475569',
     fontSize: 13,
   },
   bookBtn: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#2563eb',
     borderRadius: 10,
     padding: 16,
     alignItems: 'center',

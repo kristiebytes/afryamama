@@ -49,6 +49,12 @@ export default function WellnessTipsScreen({ email, onBack }: WellnessTipsProps)
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>MOTHER KNOWLEDGE</Text>
+          <Text style={styles.heroTitle}>What You Need To Know</Text>
+          <Text style={styles.heroText}>Practical wellness guidance curated for your current journey.</Text>
+        </View>
+
         <Text style={styles.sectionTitle}>Daily Guidance Cards</Text>
 
         {loading ? <Text style={styles.emptyText}>Loading wellness tips...</Text> : null}
@@ -78,7 +84,7 @@ export default function WellnessTipsScreen({ email, onBack }: WellnessTipsProps)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
     paddingTop: 48,
   },
   header: {
@@ -87,18 +93,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#243049',
+    borderBottomColor: '#d8e2ef',
+    backgroundColor: '#ffffff',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#f59e0b',
+    color: '#2563eb',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -106,7 +113,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 16,
@@ -121,6 +128,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   tipCategory: {
     fontSize: 10,
@@ -130,19 +142,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   tipTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 10,
   },
   tipContent: {
-    color: '#94a3b8',
+    color: '#475569',
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 16,
   },
   readMoreBtn: {
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   readMoreText: {
     fontSize: 13,

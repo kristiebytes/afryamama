@@ -39,6 +39,12 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>MOTHER HEALTH</Text>
+          <Text style={styles.heroTitle}>Clinical Records</Text>
+          <Text style={styles.heroText}>View your checkup history, vitals, and care notes in one place.</Text>
+        </View>
+
         <Text style={styles.sectionTitle}>Maternal Progress Logs</Text>
 
         {loading ? <Text style={styles.emptyText}>Loading records...</Text> : null}
@@ -56,16 +62,19 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
 
             <View style={styles.vitalsRow}>
               <View style={styles.vitalBox}>
+                <Text style={styles.vitalIcon}>⚖️</Text>
                 <Text style={styles.vitalVal}>{rec.weight}</Text>
                 <Text style={styles.vitalLbl}>Weight</Text>
               </View>
 
               <View style={styles.vitalBox}>
+                <Text style={styles.vitalIcon}>🩺</Text>
                 <Text style={styles.vitalVal}>{rec.bp}</Text>
                 <Text style={styles.vitalLbl}>Blood Pressure</Text>
               </View>
 
               <View style={styles.vitalBox}>
+                <Text style={styles.vitalIcon}>❤️</Text>
                 <Text style={styles.vitalVal}>{rec.hr}</Text>
                 <Text style={styles.vitalLbl}>Fetal Heart Rate</Text>
               </View>
@@ -85,7 +94,7 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0f19',
+    backgroundColor: '#eef3f9',
     paddingTop: 48,
   },
   header: {
@@ -94,18 +103,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#243049',
+    borderBottomColor: '#d8e2ef',
+    backgroundColor: '#ffffff',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#ec4899',
+    color: '#2563eb',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -113,7 +123,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   sectionTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 16,
@@ -124,29 +134,34 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   recordCard: {
-    backgroundColor: '#121826',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#243049',
+    borderColor: '#d8e2ef',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#182235',
+    borderBottomColor: '#e2e8f0',
     paddingBottom: 10,
     marginBottom: 14,
   },
   recordDate: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 15,
     fontWeight: '700',
   },
   clinicName: {
-    color: '#ec4899',
+    color: '#0ea5e9',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -157,37 +172,45 @@ const styles = StyleSheet.create({
   },
   vitalBox: {
     flex: 1,
-    backgroundColor: '#182235',
+    backgroundColor: '#f8fafc',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dbe4ef',
     padding: 10,
     alignItems: 'center',
     marginHorizontal: 4,
   },
   vitalVal: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 14,
     fontWeight: '700',
   },
+  vitalIcon: {
+    fontSize: 16,
+    marginBottom: 5,
+  },
   vitalLbl: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 10,
     marginTop: 4,
     textTransform: 'uppercase',
   },
   notesSection: {
-    backgroundColor: '#182235',
+    backgroundColor: '#f8fafc',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dbe4ef',
     padding: 12,
   },
   notesTitle: {
-    color: '#ffffff',
+    color: '#0f172a',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   notesText: {
-    color: '#94a3b8',
+    color: '#475569',
     fontSize: 13,
     lineHeight: 18,
   },
