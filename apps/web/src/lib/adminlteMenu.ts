@@ -48,6 +48,12 @@ export const doctorMenuItems: MenuNode[] = [
   },
   {
     type: 'item',
+    text: 'Lock Screen',
+    href: '/lockscreen',
+    icon: 'bi-shield-lock',
+  },
+  {
+    type: 'item',
     text: 'Doctor Profile',
     href: '/doctor/profile',
     icon: 'bi-person-badge',
@@ -89,6 +95,16 @@ export const adminMenuItems: MenuNode[] = [
     text: 'Notifications',
     href: '/admin/notifications',
     icon: 'bi-bell',
+  },
+  {
+    type: 'header',
+    text: 'Account',
+  },
+  {
+    type: 'item',
+    text: 'Lock Screen',
+    href: '/admin-lockscreen',
+    icon: 'bi-shield-lock',
   },
   {
     type: 'item',
