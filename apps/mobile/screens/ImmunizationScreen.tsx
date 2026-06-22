@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import {
-  getMotherImmunizationProfile,
-  getMotherVaccines,
-  type MotherImmunizationProfile,
-  type MotherVaccine,
-} from '../lib/motherDataStore';
+import { fetchImmunizationData, type MobileVaccine } from '../lib/firestoreData';
 
 interface ImmunizationProps {
   email: string;
@@ -14,30 +9,30 @@ interface ImmunizationProps {
 
 export default function ImmunizationScreen({ email, onBack }: ImmunizationProps) {
   const [loading, setLoading] = useState(true);
-  const [childProfile, setChildProfile] = useState<MotherImmunizationProfile | null>(null);
-  const [vaccines, setVaccines] = useState<MotherVaccine[]>([]);
+  const [childName, setChildName] = useState('Child Profile');
+  const [childBirth, setChildBirth] = useState('Birth date not set');
+  const [vaccines, setVaccines] = useState<MobileVaccine[]>([]);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadImmunization() {
       try {
         if (!email) {
-          setChildProfile(null);
           setVaccines([]);
           return;
         }
 
-        const [profile, rows] = await Promise.all([
-          getMotherImmunizationProfile(email),
-          getMotherVaccines(email),
-        ]);
-        setChildProfile(profile);
-        setVaccines(rows);
+        const payload = await fetchImmunizationData(email.toLowerCase());
+        if (payload.child) {
+          setChildName(payload.child.childName);
+          setChildBirth(payload.child.childBirth);
+        }
+        setVaccines(payload.vaccines);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadImmunization();
   }, [email]);
 
   return (
@@ -59,17 +54,17 @@ export default function ImmunizationScreen({ email, onBack }: ImmunizationProps)
         <View style={styles.childHeaderCard}>
           <Text style={styles.childIcon}>👶</Text>
           <View>
-            <Text style={styles.childName}>{childProfile?.childName || 'Child profile not set'}</Text>
-            <Text style={styles.childBirth}>{childProfile?.childBirth || 'Birth details not available'}</Text>
+            <Text style={styles.childName}>{childName}</Text>
+            <Text style={styles.childBirth}>Born: {childBirth}</Text>
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>Immunization Schedule</Text>
 
-        {loading ? <Text style={styles.emptyText}>Loading immunizations...</Text> : null}
+        {loading ? <Text style={styles.emptyText}>Loading immunization records...</Text> : null}
 
         {!loading && vaccines.length === 0 ? (
-          <Text style={styles.emptyText}>No immunization entries available yet.</Text>
+          <Text style={styles.emptyText}>No vaccine records found in Firestore.</Text>
         ) : null}
 
         {vaccines.map((v) => (
@@ -198,7 +193,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyText: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },

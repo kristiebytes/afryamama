@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getMotherNotifications, type MotherNotification } from '../lib/motherDataStore';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { fetchNotifications, type MobileNotification } from '../lib/firestoreData';
 
 interface NotificationsScreenProps {
   email: string;
@@ -8,25 +8,25 @@ interface NotificationsScreenProps {
 }
 
 export default function NotificationsScreen({ email, onBack }: NotificationsScreenProps) {
-  const [notifications, setNotifications] = useState<MotherNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<MobileNotification[]>([]);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadNotifications() {
       try {
         if (!email) {
-          setNotifications([]);
+          setItems([]);
           return;
         }
 
-        const rows = await getMotherNotifications(email);
-        setNotifications(rows);
+        const rows = await fetchNotifications(email.toLowerCase());
+        setItems(rows);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadNotifications();
   }, [email]);
 
   return (
@@ -39,22 +39,20 @@ export default function NotificationsScreen({ email, onBack }: NotificationsScre
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTag}>ALERT CENTER</Text>
-          <Text style={styles.heroTitle}>Notifications</Text>
-          <Text style={styles.heroText}>Timely reminders for appointments, medication, and child care tasks.</Text>
-        </View>
-
         {loading ? <Text style={styles.emptyText}>Loading notifications...</Text> : null}
 
-        {!loading && notifications.length === 0 ? (
-          <Text style={styles.emptyText}>No notifications available yet.</Text>
+        {!loading && items.length === 0 ? (
+          <Text style={styles.emptyText}>No notifications found in Firestore.</Text>
         ) : null}
 
-        {notifications.map((item) => (
+        {items.map((item) => (
           <View style={styles.card} key={item.id}>
-            <Text style={styles.cardTitle}>🔔 {item.title}</Text>
-            <Text style={styles.cardBody}>{item.body}</Text>
+            <View style={styles.row}>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={item.read ? styles.readTag : styles.unreadTag}>{item.read ? 'READ' : 'NEW'}</Text>
+            </View>
+            <Text style={styles.cardDate}>{item.date} • {item.type}</Text>
+            <Text style={styles.cardMessage}>{item.message}</Text>
           </View>
         ))}
       </ScrollView>
@@ -65,7 +63,7 @@ export default function NotificationsScreen({ email, onBack }: NotificationsScre
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
+    backgroundColor: '#0b0f19',
     paddingTop: 48,
   },
   header: {
@@ -74,19 +72,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#d8e2ef',
-    backgroundColor: '#ffffff',
+    borderBottomColor: '#243049',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#2563eb',
+    color: '#f59e0b',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#0f172a',
+    color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -94,57 +91,56 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   emptyText: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-  },
-  heroTag: {
-    color: '#f59e0b',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  heroText: {
-    color: '#475569',
-    fontSize: 13,
-    lineHeight: 18,
-  },
   card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#d8e2ef',
+    backgroundColor: '#121826',
+    borderColor: '#243049',
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
   },
-  cardTitle: {
-    color: '#0f172a',
-    fontSize: 15,
-    fontWeight: '700',
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 6,
   },
-  cardBody: {
-    color: '#475569',
+  cardTitle: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 8,
+  },
+  unreadTag: {
+    color: '#0f172a',
+    backgroundColor: '#f59e0b',
+    fontSize: 10,
+    fontWeight: '700',
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  readTag: {
+    color: '#0f172a',
+    backgroundColor: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '700',
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  cardDate: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  cardMessage: {
+    color: '#cbd5e1',
     fontSize: 13,
     lineHeight: 18,
   },

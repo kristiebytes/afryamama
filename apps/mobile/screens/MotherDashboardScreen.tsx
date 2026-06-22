@@ -4,97 +4,86 @@ import { type MotherStage } from '../lib/motherProfileStore';
 
 interface DashboardProps {
   userName: string;
-  motherCode: string;
-  stage: MotherStage;
-  pregnancyWeek: string;
-  babyAgeMonths: string;
+  pregnancyWeek: number | null;
+  nextAppointmentText: string | null;
   onNavigate: (screen: string) => void;
   onLogout: () => void;
 }
 
 export default function MotherDashboardScreen({
   userName,
-  motherCode,
-  stage,
   pregnancyWeek,
-  babyAgeMonths,
+  nextAppointmentText,
   onNavigate,
   onLogout,
 }: DashboardProps) {
-  const isPrenatal = stage === 'PRENATAL';
-  const cardHeader = isPrenatal
-    ? `Week ${pregnancyWeek || 'Not set'}`
-    : `Postnatal ${babyAgeMonths ? `• Baby ${babyAgeMonths} months` : ''}`;
-  const cardSub = isPrenatal
-    ? 'Prenatal mother profile complete. Continue ANC care plan.'
-    : 'Postnatal mother profile complete. Continue baby and mother follow-up.';
-  const progress = isPrenatal && pregnancyWeek ? Number.parseInt(pregnancyWeek, 10) : 0;
-  const progressPercent = Number.isFinite(progress) ? Math.min(Math.max((progress / 40) * 100, 0), 100) : 0;
+  const weekLabel = pregnancyWeek ? `Week ${pregnancyWeek}` : 'Pregnancy tracking pending';
+  const progressPercent = pregnancyWeek ? Math.min(Math.max((pregnancyWeek / 40) * 100, 0), 100) : 0;
   const progressWidth = `${progressPercent}%` as `${number}%`;
 
-  const prioritizedActions = [
+  const menuItems = [
     {
-      key: 'IMMUNIZATION',
-      title: 'Immunizations',
-      desc: 'Follow baby vaccine schedule',
+      screen: 'IMMUNIZATION',
+      color: '#10b981',
       icon: '💉',
-      color: '#16a34a',
+      title: 'Immunizations',
+      desc: 'Child vaccine schedule',
     },
     {
-      key: 'RECORDS',
-      title: 'Health Records',
-      desc: 'View latest maternal notes',
+      screen: 'RECORDS',
+      color: '#ec4899',
       icon: '📝',
-      color: '#0ea5e9',
+      title: 'Health Records',
+      desc: 'Prenatal checkup logs',
     },
     {
-      key: 'PROFILE',
+      screen: 'PROFILE',
+      color: '#38bdf8',
+      icon: '👩',
       title: 'Profile',
       desc: 'Mother account details',
-      icon: '👩',
-      color: '#2563eb',
     },
     {
-      key: 'SCHEDULE',
-      title: 'Schedule',
-      desc: 'Weekly care schedule',
+      screen: 'SCHEDULE',
+      color: '#a78bfa',
       icon: '🗓️',
-      color: '#1d4ed8',
+      title: 'Schedule',
+      desc: 'Clinic visit timeline',
     },
     {
-      key: 'MILESTONES',
-      title: 'Milestones',
-      desc: 'Track care milestones',
+      screen: 'MILESTONES',
+      color: '#22d3ee',
       icon: '🎯',
-      color: '#0284c7',
+      title: 'Milestones',
+      desc: 'Pregnancy progress goals',
     },
     {
-      key: 'APPOINTMENTS',
-      title: 'Appointments',
-      desc: 'Check upcoming clinic visits',
+      screen: 'APPOINTMENTS',
+      color: '#8b5cf6',
       icon: '📅',
-      color: '#2563eb',
+      title: 'Appointments',
+      desc: 'Booked and pending visits',
     },
     {
-      key: 'NOTIFICATIONS',
-      title: 'Notifications',
-      desc: 'Important reminders',
+      screen: 'NOTIFICATIONS',
+      color: '#f59e0b',
       icon: '🔔',
-      color: '#f59e0b',
+      title: 'Notifications',
+      desc: 'Reminders and alerts',
     },
     {
-      key: 'WELLNESS',
-      title: 'What You Need To Know',
-      desc: 'Daily maternal guidance',
+      screen: 'WELLNESS',
+      color: '#f97316',
       icon: '📘',
-      color: '#f59e0b',
+      title: 'What You Need To Know',
+      desc: 'Care tips and guidance',
     },
     {
-      key: 'GROWTH',
-      title: 'Growth Monitoring Charts',
-      desc: 'Child growth trend snapshots',
+      screen: 'GROWTH',
+      color: '#34d399',
       icon: '📈',
-      color: '#0f766e',
+      title: 'Growth Monitoring',
+      desc: 'Child growth charts',
     },
   ];
 
@@ -112,12 +101,9 @@ export default function MotherDashboardScreen({
 
       {/* Pregnancy Status Card */}
       <View style={styles.statusCard}>
-        <Text style={styles.cardTag}>{isPrenatal ? 'PRENATAL STATUS' : 'POSTNATAL STATUS'}</Text>
-        <Text style={styles.cardHeader}>{cardHeader}</Text>
-        <Text style={styles.cardSub}>{cardSub}</Text>
-        <View style={styles.codeBadge}>
-          <Text style={styles.codeBadgeText}>Mother Code: {motherCode}</Text>
-        </View>
+        <Text style={styles.cardTag}>PREGNANCY STATUS</Text>
+        <Text style={styles.cardHeader}>{weekLabel}</Text>
+        <Text style={styles.cardSub}>Synced from your Firebase maternal profile</Text>
         
         {/* Simple Progress Bar */}
         <View style={styles.progressTrack}>
@@ -133,11 +119,11 @@ export default function MotherDashboardScreen({
       {/* Quick Action Grid */}
       <Text style={styles.sectionTitle}>Mother Services</Text>
       <View style={styles.grid}>
-        {prioritizedActions.map((item) => (
+        {menuItems.map((item) => (
           <TouchableOpacity
-            key={item.key}
+            key={item.title}
             style={styles.gridCard}
-            onPress={() => onNavigate(item.key)}
+            onPress={() => onNavigate(item.screen)}
           >
             <View style={[styles.gridIconBg, { backgroundColor: item.color }]}>
               <Text style={styles.gridIcon}>{item.icon}</Text>
@@ -155,7 +141,9 @@ export default function MotherDashboardScreen({
           <Text style={styles.alertHeaderTitle}>Next Care Reminder</Text>
         </View>
         <Text style={styles.alertText}>
-          Keep your next clinic visit updated to stay on track with maternal and infant care.
+          {nextAppointmentText
+            ? `You have a prenatal checkup scheduled on ${nextAppointmentText}.`
+            : 'No upcoming prenatal appointment is linked yet in your profile.'}
         </Text>
       </View>
     </ScrollView>

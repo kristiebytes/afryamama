@@ -1,33 +1,44 @@
-import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getMotherGrowthRows, type MotherGrowthRow } from '../lib/motherDataStore';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { fetchGrowthMonitoring, type MobileGrowthPoint } from '../lib/firestoreData';
 
 interface GrowthMonitoringScreenProps {
   email: string;
   onBack: () => void;
 }
 
+function toNumeric(value: string): number {
+  const match = value.match(/[0-9]+(\.[0-9]+)?/);
+  if (!match) return 0;
+  return Number.parseFloat(match[0]);
+}
+
 export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitoringScreenProps) {
-  const [growthRows, setGrowthRows] = useState<MotherGrowthRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<MobileGrowthPoint[]>([]);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadGrowthRows() {
       try {
         if (!email) {
-          setGrowthRows([]);
+          setRows([]);
           return;
         }
 
-        const rows = await getMotherGrowthRows(email);
-        setGrowthRows(rows);
+        const items = await fetchGrowthMonitoring(email.toLowerCase());
+        setRows(items);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadGrowthRows();
   }, [email]);
+
+  const maxWeight = useMemo(() => {
+    if (rows.length === 0) return 0;
+    return rows.reduce((max, row) => Math.max(max, toNumeric(row.weight)), 0);
+  }, [rows]);
 
   return (
     <View style={styles.container}>
@@ -39,31 +50,29 @@ export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitori
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTag}>CHILD DEVELOPMENT</Text>
-          <Text style={styles.heroTitle}>Growth Monitoring</Text>
-          <Text style={styles.heroText}>Review growth trends over time with weight and height indicators.</Text>
-        </View>
+        {loading ? <Text style={styles.emptyText}>Loading growth data...</Text> : null}
 
-        {loading ? <Text style={styles.emptyText}>Loading growth monitoring charts...</Text> : null}
-
-        {!loading && growthRows.length === 0 ? (
-          <Text style={styles.emptyText}>No growth chart entries available yet.</Text>
+        {!loading && rows.length === 0 ? (
+          <Text style={styles.emptyText}>No growth monitoring rows found in Firestore.</Text>
         ) : null}
 
-        {growthRows.map((row) => (
-          <View key={row.id} style={styles.card}>
-            <Text style={styles.month}>{row.month}</Text>
-            <View style={styles.metricBlock}>
-              <Text style={styles.metricLabel}>Weight</Text>
-              <Text style={styles.metricValue}>{row.weight}</Text>
+        {rows.map((row) => {
+          const weight = toNumeric(row.weight);
+          const widthPercent = maxWeight > 0 ? Math.max((weight / maxWeight) * 100, 6) : 6;
+          return (
+            <View key={row.id} style={styles.card}>
+              <View style={styles.rowTop}>
+                <Text style={styles.date}>{row.date}</Text>
+                <Text style={styles.value}>{row.weight}</Text>
+              </View>
+              <View style={styles.track}>
+                <View style={[styles.bar, { width: `${widthPercent}%` as `${number}%` }]} />
+              </View>
+              <Text style={styles.meta}>Height: {row.height}</Text>
+              <Text style={styles.meta}>Head Circumference: {row.headCircumference}</Text>
             </View>
-            <View style={styles.metricBlock}>
-              <Text style={styles.metricLabel}>Height</Text>
-              <Text style={styles.metricValue}>{row.height}</Text>
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -72,7 +81,7 @@ export default function GrowthMonitoringScreen({ email, onBack }: GrowthMonitori
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
+    backgroundColor: '#0b0f19',
     paddingTop: 48,
   },
   header: {
@@ -81,19 +90,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#d8e2ef',
-    backgroundColor: '#ffffff',
+    borderBottomColor: '#243049',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#2563eb',
+    color: '#34d399',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#0f172a',
+    color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -101,68 +109,49 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   emptyText: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-  },
-  heroTag: {
-    color: '#0f766e',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  heroText: {
-    color: '#475569',
-    fontSize: 13,
-    lineHeight: 18,
-  },
   card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#d8e2ef',
+    backgroundColor: '#121826',
+    borderColor: '#243049',
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
-  month: {
-    color: '#0f172a',
-    fontSize: 15,
+  rowTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  date: {
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '700',
+  },
+  value: {
+    color: '#34d399',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  track: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#1f2a40',
+    overflow: 'hidden',
     marginBottom: 8,
   },
-  metricBlock: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#dbe4ef',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 8,
+  bar: {
+    height: '100%',
+    backgroundColor: '#34d399',
+    borderRadius: 999,
   },
-  metricLabel: {
-    color: '#64748b',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+  meta: {
+    color: '#94a3b8',
+    fontSize: 12,
     marginBottom: 2,
-  },
-  metricValue: {
-    color: '#0f172a',
-    fontSize: 15,
-    fontWeight: '700',
   },
 });

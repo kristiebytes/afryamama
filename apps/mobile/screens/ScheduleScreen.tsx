@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getMotherSchedule, type MotherScheduleItem } from '../lib/motherDataStore';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { fetchAppointments, type MobileAppointment } from '../lib/firestoreData';
 
 interface ScheduleScreenProps {
   email: string;
@@ -8,26 +8,46 @@ interface ScheduleScreenProps {
 }
 
 export default function ScheduleScreen({ email, onBack }: ScheduleScreenProps) {
-  const [scheduleItems, setScheduleItems] = useState<MotherScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<MobileAppointment[]>([]);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadSchedule() {
       try {
         if (!email) {
-          setScheduleItems([]);
+          setAppointments([]);
           return;
         }
 
-        const rows = await getMotherSchedule(email);
-        setScheduleItems(rows);
+        const rows = await fetchAppointments(email.toLowerCase());
+        setAppointments(rows);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadSchedule();
   }, [email]);
+
+  const grouped = useMemo(() => {
+    const upcoming = appointments.filter((item) => item.status !== 'COMPLETED');
+    const completed = appointments.filter((item) => item.status === 'COMPLETED');
+    return { upcoming, completed };
+  }, [appointments]);
+
+  function renderItems(rows: MobileAppointment[]) {
+    if (rows.length === 0) {
+      return <Text style={styles.emptyText}>No schedule items found.</Text>;
+    }
+
+    return rows.map((item) => (
+      <View style={styles.card} key={item.id}>
+        <Text style={styles.cardTitle}>{item.reason}</Text>
+        <Text style={styles.cardMeta}>{item.date} • {item.time}</Text>
+        <Text style={styles.cardMeta}>Provider: {item.doctor}</Text>
+      </View>
+    ));
+  }
 
   return (
     <View style={styles.container}>
@@ -35,32 +55,21 @@ export default function ScheduleScreen({ email, onBack }: ScheduleScreenProps) {
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Schedule</Text>
+        <Text style={styles.title}>My Schedule</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTag}>WEEK PLAN</Text>
-          <Text style={styles.heroTitle}>Care Schedule</Text>
-          <Text style={styles.heroText}>Stay organized with your weekly maternal activities and follow-ups.</Text>
-        </View>
-
         {loading ? <Text style={styles.emptyText}>Loading schedule...</Text> : null}
 
-        {!loading && scheduleItems.length === 0 ? (
-          <Text style={styles.emptyText}>No schedule entries available yet.</Text>
-        ) : null}
+        {!loading ? (
+          <>
+            <Text style={styles.sectionTitle}>Upcoming</Text>
+            {renderItems(grouped.upcoming)}
 
-        {scheduleItems.map((item) => (
-          <View style={styles.timelineRow} key={item.id}>
-            <View style={styles.timelineDot} />
-            <View style={styles.card}>
-              <Text style={styles.day}>{item.day}</Text>
-              <Text style={styles.slot}>{item.slot}</Text>
-              <Text style={styles.task}>{item.task}</Text>
-            </View>
-          </View>
-        ))}
+            <Text style={styles.sectionTitle}>Completed</Text>
+            {renderItems(grouped.completed)}
+          </>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -69,7 +78,7 @@ export default function ScheduleScreen({ email, onBack }: ScheduleScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
+    backgroundColor: '#0b0f19',
     paddingTop: 48,
   },
   header: {
@@ -78,89 +87,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#d8e2ef',
-    backgroundColor: '#ffffff',
+    borderBottomColor: '#243049',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#2563eb',
+    color: '#a78bfa',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#0f172a',
+    color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
   },
   content: {
     padding: 24,
   },
-  emptyText: {
-    color: '#64748b',
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-  },
-  heroTag: {
-    color: '#1d4ed8',
-    fontSize: 11,
+  sectionTitle: {
+    color: '#ffffff',
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
+    marginBottom: 10,
+    marginTop: 8,
   },
-  heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  heroText: {
-    color: '#475569',
+  emptyText: {
+    color: '#94a3b8',
     fontSize: 13,
-    lineHeight: 18,
-  },
-  timelineRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
     marginBottom: 10,
   },
-  timelineDot: {
-    width: 10,
-    borderRadius: 5,
-    backgroundColor: '#1d4ed8',
-    marginRight: 10,
-  },
   card: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderColor: '#d8e2ef',
+    backgroundColor: '#121826',
+    borderColor: '#243049',
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
-  day: {
-    color: '#0f172a',
+  cardTitle: {
+    color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
+    marginBottom: 4,
   },
-  slot: {
-    color: '#1d4ed8',
+  cardMeta: {
+    color: '#94a3b8',
     fontSize: 13,
-    marginTop: 3,
-  },
-  task: {
-    color: '#475569',
-    fontSize: 13,
-    marginTop: 8,
+    marginBottom: 2,
   },
 });

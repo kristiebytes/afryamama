@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { getMotherRecords, type MotherRecord } from '../lib/motherDataStore';
+import { fetchRecords, type MobileRecord } from '../lib/firestoreData';
 
 interface RecordsProps {
   email: string;
@@ -8,25 +8,25 @@ interface RecordsProps {
 }
 
 export default function RecordsScreen({ email, onBack }: RecordsProps) {
-  const [records, setRecords] = useState<MotherRecord[]>([]);
+  const [records, setRecords] = useState<MobileRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadRecords() {
       try {
         if (!email) {
           setRecords([]);
           return;
         }
 
-        const rows = await getMotherRecords(email);
+        const rows = await fetchRecords(email.toLowerCase());
         setRecords(rows);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadRecords();
   }, [email]);
 
   return (
@@ -50,14 +50,14 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
         {loading ? <Text style={styles.emptyText}>Loading records...</Text> : null}
 
         {!loading && records.length === 0 ? (
-          <Text style={styles.emptyText}>No health records available for this mother profile yet.</Text>
+          <Text style={styles.emptyText}>No prenatal records found in Firestore.</Text>
         ) : null}
 
         {records.map((rec) => (
           <View style={styles.recordCard} key={rec.id}>
             <View style={styles.cardHeader}>
               <Text style={styles.recordDate}>{rec.date}</Text>
-              <Text style={styles.clinicName}>AfyaMama Clinic</Text>
+              <Text style={styles.clinicName}>Clinical Record</Text>
             </View>
 
             <View style={styles.vitalsRow}>
@@ -128,39 +128,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 16,
   },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  heroTag: {
-    color: '#0ea5e9',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  heroText: {
-    color: '#475569',
-    fontSize: 13,
-    lineHeight: 18,
-  },
   emptyText: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },

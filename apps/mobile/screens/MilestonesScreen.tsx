@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getMotherMilestones, type MotherMilestone } from '../lib/motherDataStore';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { fetchMilestones, type MobileMilestone } from '../lib/firestoreData';
 
 interface MilestonesScreenProps {
   email: string;
@@ -8,25 +8,25 @@ interface MilestonesScreenProps {
 }
 
 export default function MilestonesScreen({ email, onBack }: MilestonesScreenProps) {
-  const [milestones, setMilestones] = useState<MotherMilestone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [milestones, setMilestones] = useState<MobileMilestone[]>([]);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadMilestones() {
       try {
         if (!email) {
           setMilestones([]);
           return;
         }
 
-        const rows = await getMotherMilestones(email);
+        const rows = await fetchMilestones(email.toLowerCase());
         setMilestones(rows);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadMilestones();
   }, [email]);
 
   return (
@@ -39,22 +39,20 @@ export default function MilestonesScreen({ email, onBack }: MilestonesScreenProp
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTag}>TRACKER</Text>
-          <Text style={styles.heroTitle}>Milestones</Text>
-          <Text style={styles.heroText}>Follow your progress from registration to delivery and postnatal care.</Text>
-        </View>
-
         {loading ? <Text style={styles.emptyText}>Loading milestones...</Text> : null}
 
         {!loading && milestones.length === 0 ? (
-          <Text style={styles.emptyText}>No milestones available yet.</Text>
+          <Text style={styles.emptyText}>No milestone entries found in Firestore.</Text>
         ) : null}
 
         {milestones.map((item) => (
           <View style={styles.card} key={item.id}>
-            <Text style={styles.name}>{item.title}</Text>
-            <Text style={item.status === 'Completed' ? styles.done : styles.pending}>{item.status}</Text>
+            <View style={styles.row}>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={styles.weekChip}>{item.week}</Text>
+            </View>
+            <Text style={styles.cardMeta}>Status: {item.status}</Text>
+            <Text style={styles.cardText}>{item.details}</Text>
           </View>
         ))}
       </ScrollView>
@@ -65,7 +63,7 @@ export default function MilestonesScreen({ email, onBack }: MilestonesScreenProp
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
+    backgroundColor: '#0b0f19',
     paddingTop: 48,
   },
   header: {
@@ -74,19 +72,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#d8e2ef',
-    backgroundColor: '#ffffff',
+    borderBottomColor: '#243049',
   },
   backBtn: {
     marginRight: 16,
   },
   backBtnText: {
-    color: '#2563eb',
+    color: '#22d3ee',
     fontSize: 16,
     fontWeight: '600',
   },
   title: {
-    color: '#0f172a',
+    color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -94,68 +91,48 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   emptyText: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-  },
-  heroTag: {
-    color: '#0284c7',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  heroText: {
-    color: '#475569',
-    fontSize: 13,
-    lineHeight: 18,
-  },
   card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#d8e2ef',
+    backgroundColor: '#121826',
+    borderColor: '#243049',
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
-  name: {
-    color: '#0f172a',
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardTitle: {
+    color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
-    marginBottom: 6,
+    flex: 1,
+    marginRight: 8,
   },
-  done: {
-    alignSelf: 'flex-start',
-    color: '#15803d',
-    backgroundColor: '#dcfce7',
+  weekChip: {
+    color: '#0f172a',
+    backgroundColor: '#22d3ee',
     fontSize: 11,
     fontWeight: '700',
+    paddingVertical: 3,
     paddingHorizontal: 8,
-    paddingVertical: 4,
     borderRadius: 999,
   },
-  pending: {
-    alignSelf: 'flex-start',
-    color: '#b45309',
-    backgroundColor: '#fef3c7',
-    fontSize: 11,
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
+  cardMeta: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  cardText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

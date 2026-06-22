@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { getMotherAppointments, type MotherAppointment } from '../lib/motherDataStore';
+import { fetchAppointments, type MobileAppointment } from '../lib/firestoreData';
 
 interface AppointmentsProps {
   email: string;
@@ -8,25 +8,25 @@ interface AppointmentsProps {
 }
 
 export default function AppointmentsScreen({ email, onBack }: AppointmentsProps) {
-  const [appointments, setAppointments] = useState<MotherAppointment[]>([]);
+  const [appointments, setAppointments] = useState<MobileAppointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadAppointments() {
       try {
         if (!email) {
           setAppointments([]);
           return;
         }
 
-        const rows = await getMotherAppointments(email);
+        const rows = await fetchAppointments(email.toLowerCase());
         setAppointments(rows);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadAppointments();
   }, [email]);
 
   return (
@@ -53,6 +53,12 @@ export default function AppointmentsScreen({ email, onBack }: AppointmentsProps)
           <Text style={styles.emptyText}>No appointments available for this mother profile yet.</Text>
         ) : null}
         
+        {loading ? <Text style={styles.emptyText}>Loading appointments...</Text> : null}
+
+        {!loading && appointments.length === 0 ? (
+          <Text style={styles.emptyText}>No appointments found in your Firestore records.</Text>
+        ) : null}
+
         {appointments.map((appt) => (
           <View style={styles.apptCard} key={appt.id}>
             <View style={styles.cardHeader}>
@@ -78,8 +84,8 @@ export default function AppointmentsScreen({ email, onBack }: AppointmentsProps)
           </View>
         ))}
 
-        <TouchableOpacity style={styles.bookBtn}>
-          <Text style={styles.bookBtnText}>+ Request New Appointment</Text>
+        <TouchableOpacity style={styles.bookBtn} disabled>
+          <Text style={styles.bookBtnText}>Appointment requests are managed by clinic staff</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -123,39 +129,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 16,
   },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  heroTag: {
-    color: '#1d4ed8',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  heroText: {
-    color: '#475569',
-    fontSize: 13,
-    lineHeight: 18,
-  },
   emptyText: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },

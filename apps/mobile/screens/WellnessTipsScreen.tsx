@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { getMotherTips, type MotherTip } from '../lib/motherDataStore';
+import { fetchWellnessTips, type MobileTip } from '../lib/firestoreData';
 
 interface WellnessTipsProps {
   email: string;
@@ -8,26 +8,36 @@ interface WellnessTipsProps {
 }
 
 export default function WellnessTipsScreen({ email, onBack }: WellnessTipsProps) {
-  const [tips, setTips] = useState<MotherTip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tips, setTips] = useState<MobileTip[]>([]);
 
   useEffect(() => {
-    async function loadRows() {
+    async function loadTips() {
       try {
         if (!email) {
           setTips([]);
           return;
         }
 
-        const rows = await getMotherTips(email);
+        const rows = await fetchWellnessTips(email.toLowerCase());
         setTips(rows);
       } finally {
         setLoading(false);
       }
     }
 
-    loadRows();
+    loadTips();
   }, [email]);
+
+  function cardStyles(index: number) {
+    const themes = [
+      { bg: 'rgba(139, 92, 246, 0.1)', border: 'rgba(139, 92, 246, 0.2)', tagColor: '#8b5cf6' },
+      { bg: 'rgba(236, 72, 153, 0.1)', border: 'rgba(236, 72, 153, 0.2)', tagColor: '#ec4899' },
+      { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.2)', tagColor: '#10b981' },
+      { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.2)', tagColor: '#f59e0b' },
+    ];
+    return themes[index % themes.length];
+  }
 
   return (
     <View style={styles.container}>
@@ -47,23 +57,25 @@ export default function WellnessTipsScreen({ email, onBack }: WellnessTipsProps)
 
         <Text style={styles.sectionTitle}>Daily Guidance Cards</Text>
 
-        {loading ? <Text style={styles.emptyText}>Loading wellness guidance...</Text> : null}
+        {loading ? <Text style={styles.emptyText}>Loading wellness tips...</Text> : null}
 
         {!loading && tips.length === 0 ? (
-          <Text style={styles.emptyText}>No wellness tips available yet.</Text>
+          <Text style={styles.emptyText}>No wellness tips found in Firestore.</Text>
         ) : null}
 
-        {tips.map((tip) => (
-          <View style={[styles.tipCard, { backgroundColor: tip.bg, borderColor: tip.border }]} key={tip.id}>
-            <Text style={[styles.tipCategory, { color: tip.tagColor }]}>{tip.category}</Text>
+        {tips.map((tip, index) => {
+          const theme = cardStyles(index);
+          return (
+          <View style={[styles.tipCard, { backgroundColor: theme.bg, borderColor: theme.border }]} key={tip.id}>
+            <Text style={[styles.tipCategory, { color: theme.tagColor }]}>{tip.category}</Text>
             <Text style={styles.tipTitle}>{tip.title}</Text>
             <Text style={styles.tipContent}>{tip.content}</Text>
             
-            <TouchableOpacity style={[styles.readMoreBtn, { borderColor: tip.tagColor }]}>
-              <Text style={[styles.readMoreText, { color: tip.tagColor }]}>Read full article →</Text>
+            <TouchableOpacity style={styles.readMoreBtn}>
+              <Text style={[styles.readMoreText, { color: theme.tagColor }]}>Read full article →</Text>
             </TouchableOpacity>
           </View>
-        ))}
+        );})}
       </ScrollView>
     </View>
   );
@@ -106,39 +118,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 16,
   },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  heroTag: {
-    color: '#f59e0b',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  heroText: {
-    color: '#475569',
-    fontSize: 13,
-    lineHeight: 18,
-  },
   emptyText: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 13,
     marginBottom: 12,
   },

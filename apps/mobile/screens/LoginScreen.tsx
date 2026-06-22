@@ -23,7 +23,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     try {
       await onLoginSuccess(email, password);
     } catch {
-      setError('Login failed. Please try again.');
+      setError('Login failed. Check credentials and try again.');
     } finally {
       setLoading(false);
     }
@@ -197,9 +197,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   errorText: {
-    color: '#ef4444',
     marginTop: 12,
+    color: '#ef4444',
     fontSize: 13,
     textAlign: 'center',
+    fontWeight: '600',
   },
 });
