@@ -17,11 +17,11 @@ import TimelineScreen from './screens/TimelineScreen';
 import MilestonesScreen from './screens/MilestonesScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import GrowthMonitoringScreen from './screens/GrowthMonitoringScreen';
-import { firebaseAuth } from './lib/firebaseClient';
 import {
   loadMotherProfile,
   loginWithFirebase,
   logoutFromFirebase,
+  sendMotherPasswordReset,
   signUpMotherWithFirebase,
 } from './lib/firebaseAuth';
 import { saveMotherProfile } from './lib/motherProfileStore';
@@ -69,9 +69,10 @@ export default function App() {
       if (redirectToProfileAfterSignUpRef.current) {
         redirectToProfileAfterSignUpRef.current = false;
         setCurrentScreen('PROFILE_SETUP');
-      } else {
-        setCurrentScreen('DASHBOARD');
+        return;
       }
+
+      setCurrentScreen('DASHBOARD');
     });
 
     return () => unsubscribe();
@@ -81,9 +82,18 @@ export default function App() {
     await loginWithFirebase(email, password);
   };
 
-  const handleSignUpSuccess = async (email: string, password: string) => {
+  const handleSignUpSuccess = async (fullName: string, email: string, password: string) => {
     redirectToProfileAfterSignUpRef.current = true;
-    await signUpMotherWithFirebase(email, password);
+    try {
+      await signUpMotherWithFirebase(fullName, email, password);
+    } catch (error) {
+      redirectToProfileAfterSignUpRef.current = false;
+      throw error;
+    }
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    await sendMotherPasswordReset(email);
   };
 
   const handleLogout = async () => {
@@ -107,6 +117,7 @@ export default function App() {
           <LoginScreen
             onLoginSuccess={handleLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
+            onForgotPassword={handleForgotPassword}
           />
         );
       case 'DASHBOARD':
@@ -153,6 +164,7 @@ export default function App() {
           <LoginScreen
             onLoginSuccess={handleLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
+            onForgotPassword={handleForgotPassword}
           />
         );
     }

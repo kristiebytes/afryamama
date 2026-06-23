@@ -93,6 +93,14 @@ npm run dev:mobile
 ```
 - Press `w` to run in the web browser, `a` for Android Emulator, or `i` for iOS Simulator.
 
+### Build Mobile Android Dev Client
+Use this when testing native Android behavior:
+```bash
+npm run run:mobile:android
+```
+
+Note: Run Android prebuild commands from the workspace script above (not from repo-root `npx expo run:android`) to avoid unintended root dependency changes.
+
 ---
 
 ## Unified Package System
@@ -128,6 +136,8 @@ You can log in to the portals using these pre-registered clinic credentials:
 | **Doctor / Clinician** | `doctor@afryamama.org` | *any value* | Redirects to Doctor Dashboard |
 | **System Administrator** | `admin@afryamama.org` | *any value* | Redirects to Admin Dashboard |
 | **Mother (Mobile App)** | `mother@afryamama.org` | *any value* | Authenticates Mother profile |
+
+Mobile authentication currently supports email/password sign in, account creation, and password reset. Fingerprint login is not enabled.
 
 ---
 

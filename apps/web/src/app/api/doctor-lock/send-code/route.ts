@@ -65,7 +65,8 @@ export async function POST(request: Request) {
     saveActivationCode(email, code);
 
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ message: 'Failed to send activation code.' }, { status: 500 });
+  } catch (error) {
+    const details = error instanceof Error && error.message ? ` ${error.message}` : '';
+    return NextResponse.json({ message: `Failed to send activation code.${details}` }, { status: 500 });
   }
 }

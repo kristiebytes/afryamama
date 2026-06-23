@@ -93,6 +93,7 @@ export default function AdminLteDashboardShell({ role, allowedRoles, children }:
       <DashboardLayout
         menuItems={menuItems}
         logo={<span style={{ fontWeight: 700, letterSpacing: '0.02em' }}>AfyaMama</span>}
+        sidebarTheme="light"
         fixedHeader
         fixedSidebar
         colorModeToggle

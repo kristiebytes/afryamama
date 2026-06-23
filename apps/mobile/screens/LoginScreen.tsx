@@ -1,17 +1,69 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Dimensions,
+  ScrollView,
+} from 'react-native';
 
 interface LoginScreenProps {
   onLoginSuccess: (email: string, password: string) => Promise<void>;
-  onSignUpSuccess: (email: string, password: string) => Promise<void>;
+  onSignUpSuccess: (
+    fullName: string,
+    email: string,
+    password: string
+  ) => Promise<void>;
+  onForgotPassword: (email: string) => Promise<void>;
 }
 
-export default function LoginScreen({ onLoginSuccess, onSignUpSuccess }: LoginScreenProps) {
-  const [email, setEmail] = useState('mother@afryamama.org');
-  const [password, setPassword] = useState('password');
+export default function LoginScreen({
+  onLoginSuccess,
+  onSignUpSuccess,
+  onForgotPassword,
+}: LoginScreenProps) {
+  const [isSignUp, setIsSignUp] = useState(false);
+
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const getAuthErrorMessage = (err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message.trim()) {
+      const firebaseCode = (err as { code?: string }).code;
+
+      if (firebaseCode === 'auth/email-already-in-use') {
+        return 'This email is already in use. Please log in instead.';
+      }
+
+      if (firebaseCode === 'auth/invalid-email') {
+        return 'Please enter a valid email address.';
+      }
+
+      if (firebaseCode === 'auth/weak-password') {
+        return 'Password is too weak. Use at least 6 characters.';
+      }
+
+      if (firebaseCode === 'auth/network-request-failed') {
+        return 'Network error. Check your internet and try again.';
+      }
+
+      return err.message;
+    }
+
+    return fallback;
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -21,19 +73,25 @@ export default function LoginScreen({ onLoginSuccess, onSignUpSuccess }: LoginSc
 
     setLoading(true);
     setError(null);
+    setInfo(null);
 
     try {
       await onLoginSuccess(email, password);
-    } catch {
-      setError('Login failed. Check credentials and try again.');
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Login failed. Check credentials and try again.'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleSignUp = async () => {
-    if (!email.trim() || !password.trim()) {
-      setError('Email and password are required.');
+    if (!fullName.trim()) {
+      setError('Full name is required.');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Email address is required.');
       return;
     }
 
@@ -44,13 +102,42 @@ export default function LoginScreen({ onLoginSuccess, onSignUpSuccess }: LoginSc
 
     setSignupLoading(true);
     setError(null);
+    setInfo(null);
 
     try {
-      await onSignUpSuccess(email, password);
-    } catch {
-      setError('Account creation failed. Try a different email or password.');
+      await onSignUpSuccess(fullName, email, password);
+
+      setInfo('Account created successfully.');
+
+      setFullName('');
+      setEmail('');
+      setPassword('');
+
+      setIsSignUp(false);
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Account creation failed. Please try again.'));
     } finally {
       setSignupLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Enter your email address.');
+      return;
+    }
+
+    setResetLoading(true);
+    setError(null);
+    setInfo(null);
+
+    try {
+      await onForgotPassword(email);
+      setInfo('Password reset link sent to your email.');
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Failed to send reset email.'));
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -59,30 +146,73 @@ export default function LoginScreen({ onLoginSuccess, onSignUpSuccess }: LoginSc
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <View style={styles.card}>
-        <View style={styles.topBanner}>
-          <Text style={styles.bannerTag}>MOTHER PORTAL</Text>
-          <Text style={styles.bannerText}>Your care journey starts here</Text>
+      <ScrollView
+        style={styles.fullWidth}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTag}>MOTHER CARE</Text>
+          <Text style={styles.heroTitle}>Safe motherhood starts here</Text>
+          <Text style={styles.heroText}>
+            Track appointments, records, wellness tips and your pregnancy journey in one secure place.
+          </Text>
         </View>
 
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>A</Text>
-        </View>
+        <View style={styles.card}>
+          <View style={styles.modeTabs}>
+            <TouchableOpacity
+              style={[styles.modeTab, !isSignUp ? styles.modeTabActive : null]}
+              onPress={() => {
+                setError(null);
+                setInfo(null);
+                setIsSignUp(false);
+              }}
+            >
+              <Text style={[styles.modeTabText, !isSignUp ? styles.modeTabTextActive : null]}>Log In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeTab, isSignUp ? styles.modeTabActive : null]}
+              onPress={() => {
+                setError(null);
+                setInfo(null);
+                setIsSignUp(true);
+              }}
+            >
+              <Text style={[styles.modeTabText, isSignUp ? styles.modeTabTextActive : null]}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
 
-        <Text style={styles.title}>AfyaMama</Text>
-        <Text style={styles.subtitle}>Maternal & Infant Health Companion</Text>
+          <Text style={styles.title}>{isSignUp ? 'Create your account' : 'Welcome back, mama'}</Text>
 
-        <View style={styles.form}>
+          <Text style={styles.subtitle}>
+            {isSignUp
+              ? 'Create your account then set up your profile.'
+              : 'Log in with your email and password.'}
+          </Text>
+
+          <View style={styles.form}>
+          {isSignUp && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Full Name</Text>
+              <TextInput
+                style={styles.input}
+                value={fullName}
+                onChangeText={setFullName}
+                placeholder="Enter your full name"
+              />
+            </View>
+          )}
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email Address</Text>
             <TextInput
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder=""
-              placeholderTextColor="#94a3b8"
               keyboardType="email-address"
               autoCapitalize="none"
+              placeholder="Enter your email"
             />
           </View>
 
@@ -92,23 +222,84 @@ export default function LoginScreen({ onLoginSuccess, onSignUpSuccess }: LoginSc
               style={styles.input}
               value={password}
               onChangeText={setPassword}
-              placeholder=""
-              placeholderTextColor="#94a3b8"
               secureTextEntry
+              placeholder="Enter your password"
             />
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleLogin}>
-            <Text style={styles.buttonText}>{loading ? 'Signing in...' : 'Log In'}</Text>
-          </TouchableOpacity>
+            {!isSignUp ? (
+            <>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={handleLogin}
+              >
+                <Text style={styles.buttonText}>
+                  {loading ? 'Signing In...' : 'Log In'}
+                </Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleSignUp}>
-            <Text style={styles.secondaryButtonText}>{signupLoading ? 'Creating account...' : 'Create Account'}</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.linkButton}
+                onPress={handleForgotPassword}
+              >
+                <Text style={styles.linkButtonText}>
+                  {resetLoading
+                    ? 'Sending reset link...'
+                    : 'Forgot Password?'}
+                </Text>
+              </TouchableOpacity>
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              <TouchableOpacity
+                style={styles.switchButton}
+                onPress={() => {
+                  setError(null);
+                  setInfo(null);
+                  setIsSignUp(true);
+                }}
+              >
+                <Text style={styles.switchButtonText}>
+                  Don't have an account? Sign Up
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={handleSignUp}
+              >
+                <Text style={styles.buttonText}>
+                  {signupLoading
+                    ? 'Creating Account...'
+                    : 'Create Account'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.switchButton}
+                onPress={() => {
+                  setError(null);
+                  setInfo(null);
+                  setIsSignUp(false);
+                }}
+              >
+                <Text style={styles.switchButtonText}>
+                  Already have an account? Log In
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : null}
+
+          {info ? (
+            <Text style={styles.infoText}>{info}</Text>
+          ) : null}
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -118,132 +309,143 @@ const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
+    backgroundColor: '#eef0ff',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+  },
+  fullWidth: {
+    width: '100%',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    gap: 14,
+  },
+  heroCard: {
+    width: Platform.OS === 'web' && width > 480 ? 420 : '100%',
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+    backgroundColor: '#faf5ff',
+  },
+  heroTag: {
+    alignSelf: 'flex-start',
+    color: '#6d28d9',
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 0.6,
+    backgroundColor: '#ede9fe',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  heroTitle: {
+    marginTop: 12,
+    fontSize: 24,
+    color: '#1f2937',
+    fontWeight: '800',
+  },
+  heroText: {
+    marginTop: 8,
+    color: '#475569',
+    lineHeight: 21,
   },
   card: {
-    width: Platform.OS === 'web' && width > 480 ? 400 : '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 32,
+    width: Platform.OS === 'web' && width > 480 ? 420 : '100%',
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    padding: 22,
     borderWidth: 1,
-    borderColor: '#d8e2ef',
-    alignItems: 'center',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 4,
+    borderColor: '#dbe1ff',
   },
-  topBanner: {
-    width: '100%',
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-    borderWidth: 1,
+  modeTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#f3f4f6',
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 16,
+    padding: 4,
+    marginBottom: 14,
   },
-  bannerTag: {
-    color: '#1d4ed8',
-    fontSize: 10,
-    letterSpacing: 1,
-    fontWeight: '700',
-    marginBottom: 3,
-  },
-  bannerText: {
-    color: '#334155',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  logoContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    backgroundColor: '#2563eb',
-    justifyContent: 'center',
+  modeTab: {
+    flex: 1,
     alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
-  logoText: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#ffffff',
+  modeTabActive: {
+    backgroundColor: '#ffffff',
+  },
+  modeTabText: {
+    color: '#64748b',
+    fontWeight: '700',
+  },
+  modeTabTextActive: {
+    color: '#111827',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 6,
+    fontSize: 27,
+    fontWeight: '800',
+    color: '#111827',
   },
   subtitle: {
-    fontSize: 14,
     color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 32,
+    marginTop: 6,
+    marginBottom: 18,
   },
   form: {
     width: '100%',
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
-    fontSize: 12,
+    marginBottom: 6,
     fontWeight: '600',
     color: '#475569',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
   input: {
-    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#d1d5db',
     borderRadius: 10,
-    padding: 14,
-    color: '#0f172a',
-    fontSize: 15,
+    padding: 13,
+    backgroundColor: '#f9fafb',
   },
   button: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#6d28d9',
+    padding: 15,
     borderRadius: 10,
-    padding: 16,
     alignItems: 'center',
-    marginTop: 12,
   },
   buttonText: {
-    color: '#ffffff',
+    color: '#fff',
     fontWeight: '700',
-    fontSize: 16,
   },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: '#2563eb',
-    borderRadius: 10,
-    padding: 14,
+  linkButton: {
+    marginTop: 14,
     alignItems: 'center',
-    marginTop: 10,
-    backgroundColor: '#ffffff',
   },
-  secondaryButtonText: {
-    color: '#2563eb',
+  linkButtonText: {
+    color: '#4f46e5',
+    fontWeight: '600',
+  },
+  switchButton: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  switchButtonText: {
+    color: '#4338ca',
     fontWeight: '700',
-    fontSize: 15,
   },
   errorText: {
-    marginTop: 12,
-    color: '#ef4444',
-    fontSize: 13,
+    color: '#dc2626',
     textAlign: 'center',
-    fontWeight: '600',
+    marginTop: 14,
+  },
+  infoText: {
+    color: '#0f766e',
+    textAlign: 'center',
+    marginTop: 14,
   },
 });
