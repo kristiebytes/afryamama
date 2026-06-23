@@ -130,7 +130,7 @@ export default function AdminProfilePage() {
           <span>Profile Details</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div className="grid-two-cols">
           <div className="form-group">
             <label className="form-label">First Name</label>
             <input
@@ -173,7 +173,7 @@ export default function AdminProfilePage() {
           </div>
         </div>
 
-        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="action-row">
           <button className="btn btn-primary" onClick={saveProfile} disabled={loading || saving}>
             {saving ? 'Saving...' : 'Save Profile'}
           </button>

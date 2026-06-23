@@ -180,9 +180,6 @@ npm run db:migrate
 Run the workspaces concurrently or individually from the root directory:
 
 ```bash
-# Run all workspaces in development mode (Express, Next.js, and Expo)
-npm run dev
-
 # Run Express server only
 npm run dev:server
 
@@ -191,6 +188,9 @@ npm run dev:web
 
 # Run Expo mobile client bundler only
 npm run dev:mobile
+
+# Build Android dev client (native)
+npm run run:mobile:android
 ```
 
 ---

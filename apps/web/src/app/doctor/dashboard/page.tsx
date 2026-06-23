@@ -20,6 +20,7 @@ interface DashboardMetrics {
 interface AppointmentRow {
   id: string;
   motherName: string;
+  age: string;
   contact: string;
   appointmentTime: string;
   reason: string;
@@ -55,12 +56,32 @@ function getStatusBadgeClass(status: string): string {
   return 'badge-success';
 }
 
+function toAgeLabel(value: unknown): string {
+  if (typeof value !== 'string') return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '-';
+
+  const now = new Date();
+  let age = now.getFullYear() - parsed.getFullYear();
+  const monthDiff = now.getMonth() - parsed.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < parsed.getDate())) {
+    age -= 1;
+  }
+  return age >= 0 ? String(age) : '-';
+}
+
 export default function DoctorDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [doctorName, setDoctorName] = useState('Doctor');
   const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  const [nameFilter, setNameFilter] = useState('');
+  const [ageFilter, setAgeFilter] = useState('');
+  const [contactFilter, setContactFilter] = useState('');
+  const [timeFilter, setTimeFilter] = useState('');
+  const [reasonFilter, setReasonFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -90,6 +111,12 @@ export default function DoctorDashboard() {
           getDocs(collection(firebaseDb, 'children')),
           getDocs(collection(firebaseDb, 'appointments')),
         ]);
+
+        const motherAgeById = new Map<string, string>();
+        mothersSnapshot.docs.forEach((docItem: DocSnapshotLike) => {
+          const data = docItem.data() as Record<string, unknown>;
+          motherAgeById.set(docItem.id, toAgeLabel(data.dateOfBirth || data.dob));
+        });
 
         const today = new Date();
         const todayKey = today.toISOString().slice(0, 10);
@@ -136,6 +163,7 @@ export default function DoctorDashboard() {
           return {
             id: docItem.id,
             motherName,
+            age: motherAgeById.get(motherId) || '-',
             contact: (data.phone || data.contact || data.motherPhone || '-').toString(),
             appointmentTime: toTimeLabel(data.dateTime || data.appointmentTime || data.date),
             reason: (data.reason || data.notes || 'Consultation').toString(),
@@ -163,6 +191,27 @@ export default function DoctorDashboard() {
     if (!doctorName) return 'Doctor';
     return doctorName;
   }, [doctorName]);
+
+  const filteredAppointments = useMemo(() => {
+    const nameTerm = nameFilter.trim().toLowerCase();
+    const ageTerm = ageFilter.trim().toLowerCase();
+    const contactTerm = contactFilter.trim().toLowerCase();
+    const timeTerm = timeFilter.trim().toLowerCase();
+    const reasonTerm = reasonFilter.trim().toLowerCase();
+    const statusTerm = statusFilter.trim().toLowerCase();
+
+    if (!nameTerm && !ageTerm && !contactTerm && !timeTerm && !reasonTerm && !statusTerm) return appointments;
+
+    return appointments.filter((item) => {
+      const nameMatches = !nameTerm || item.motherName.toLowerCase().includes(nameTerm);
+      const ageMatches = !ageTerm || item.age.toLowerCase().includes(ageTerm);
+      const contactMatches = !contactTerm || item.contact.toLowerCase().includes(contactTerm);
+      const timeMatches = !timeTerm || item.appointmentTime.toLowerCase().includes(timeTerm);
+      const reasonMatches = !reasonTerm || item.reason.toLowerCase().includes(reasonTerm);
+      const statusMatches = !statusTerm || item.status.toLowerCase().includes(statusTerm);
+      return nameMatches && ageMatches && contactMatches && timeMatches && reasonMatches && statusMatches;
+    });
+  }, [appointments, nameFilter, ageFilter, contactFilter, timeFilter, reasonFilter, statusFilter]);
 
   return (
     <main className="main-content">
@@ -210,34 +259,57 @@ export default function DoctorDashboard() {
         <div className="content-card">
           <div className="card-header">
             <span>Upcoming Clinical Consultations</span>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>View All</button>
+            <button className="btn btn-secondary btn-compact">View All</button>
           </div>
-          
+
           <div className="table-container">
             <table className="custom-table">
               <thead>
                 <tr>
                   <th>Mother Name</th>
+                  <th>Age</th>
                   <th>Contact</th>
                   <th>Appointment Time</th>
                   <th>Reason</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
+                <tr className="table-filter-row">
+                  <th>
+                    <input id="doctor-filter-name" className="table-filter-input" value={nameFilter} onChange={(event) => setNameFilter(event.target.value)} placeholder="Search name" />
+                  </th>
+                  <th>
+                    <input id="doctor-filter-age" className="table-filter-input" value={ageFilter} onChange={(event) => setAgeFilter(event.target.value)} placeholder="Age" />
+                  </th>
+                  <th>
+                    <input id="doctor-filter-contact" className="table-filter-input" value={contactFilter} onChange={(event) => setContactFilter(event.target.value)} placeholder="Contact" />
+                  </th>
+                  <th>
+                    <input id="doctor-filter-time" className="table-filter-input" value={timeFilter} onChange={(event) => setTimeFilter(event.target.value)} placeholder="Time" />
+                  </th>
+                  <th>
+                    <input id="doctor-filter-reason" className="table-filter-input" value={reasonFilter} onChange={(event) => setReasonFilter(event.target.value)} placeholder="Reason" />
+                  </th>
+                  <th>
+                    <input id="doctor-filter-status" className="table-filter-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} placeholder="Status" />
+                  </th>
+                  <th />
+                </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6}>Loading appointments from Firestore...</td>
+                    <td colSpan={7}>Loading appointments from Firestore...</td>
                   </tr>
-                ) : appointments.length === 0 ? (
+                ) : filteredAppointments.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>No appointments found for this doctor in Firestore.</td>
+                    <td colSpan={7}>No appointments found for the selected filter.</td>
                   </tr>
                 ) : (
-                  appointments.map((appointment) => (
+                  filteredAppointments.map((appointment) => (
                     <tr key={appointment.id}>
                       <td>{appointment.motherName}</td>
+                      <td>{appointment.age}</td>
                       <td>{appointment.contact}</td>
                       <td>{appointment.appointmentTime}</td>
                       <td>{appointment.reason}</td>
@@ -247,7 +319,7 @@ export default function DoctorDashboard() {
                         </span>
                       </td>
                       <td>
-                        <Link href={appointment.recordLink} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                        <Link href={appointment.recordLink} className="btn btn-primary btn-compact">
                           Open File
                         </Link>
                       </td>

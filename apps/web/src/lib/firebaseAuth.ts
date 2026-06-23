@@ -111,16 +111,32 @@ async function existsInCollection(collectionName: string, email: string, uid: st
   return !!docMatch;
 }
 
+async function isClinicianInactive(email: string, uid: string): Promise<boolean> {
+  const doctorDoc = await findMatchingDoc(['doctors', 'Doctors'], email, uid);
+  if (!doctorDoc) return false;
+
+  const data = doctorDoc.data() as Record<string, unknown>;
+  const status = (typeof data.status === 'string' ? data.status : '').trim().toUpperCase();
+  return status === 'INACTIVE';
+}
+
 export async function resolveDashboardRole(user: FirebaseUser): Promise<DashboardRole | null> {
   const email = user.email?.trim().toLowerCase();
   if (!email) return null;
   const uid = user.uid;
 
   const roleFromUsers = await findRoleInUsers(email, uid);
-  if (roleFromUsers) return roleFromUsers;
+  if (roleFromUsers === 'ADMIN') return 'ADMIN';
+  if (roleFromUsers === 'DOCTOR') {
+    if (await isClinicianInactive(email, uid)) return null;
+    return 'DOCTOR';
+  }
 
   if (await existsInCollection('admins', email, uid)) return 'ADMIN';
-  if (await existsInCollection('doctors', email, uid)) return 'DOCTOR';
+  if (await existsInCollection('doctors', email, uid)) {
+    if (await isClinicianInactive(email, uid)) return null;
+    return 'DOCTOR';
+  }
 
   if (email.includes('admin')) return 'ADMIN';
   if (email.includes('doctor')) return 'DOCTOR';

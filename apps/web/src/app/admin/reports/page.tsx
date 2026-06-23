@@ -91,7 +91,7 @@ export default function AdminReportsPage() {
         </div>
       ) : (
         <div className="content-card">
-          <button className="btn btn-secondary" onClick={() => setSelected(null)} style={{ marginBottom: '16px' }}>
+          <button className="btn btn-secondary btn-compact" onClick={() => setSelected(null)} style={{ marginBottom: '16px' }}>
             Back
           </button>
 

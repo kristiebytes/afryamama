@@ -96,7 +96,7 @@ export default function DoctorProfilePage() {
 
       <div className="content-card" style={{ maxWidth: '760px' }}>
         <form onSubmit={toggleEdit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="grid-two-cols">
             <div className="form-group">
               <label className="form-label" htmlFor="doc-first">First Name</label>
               <input

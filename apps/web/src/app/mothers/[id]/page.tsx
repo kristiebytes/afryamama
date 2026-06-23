@@ -226,7 +226,7 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
         </div>
       </div>
 
-      <div className="content-card" style={{ marginBottom: '24px' }}>
+      <div className="content-card card-spaced">
         <div className="card-header">
           <span>Mother Overview</span>
         </div>
@@ -244,10 +244,10 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
         )}
       </div>
 
-      <div className="content-card" style={{ marginBottom: '24px' }}>
+      <div className="content-card card-spaced">
         <div className="card-header">
           <span>ANC History</span>
-          <Link href={`/records/anc/${motherId}`} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+          <Link href={`/records/anc/${motherId}`} className="btn btn-secondary btn-compact">
             Open ANC
           </Link>
         </div>
@@ -285,10 +285,10 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
         </div>
       </div>
 
-      <div className="content-card" style={{ marginBottom: '24px' }}>
+      <div className="content-card card-spaced">
         <div className="card-header">
           <span>PNC History</span>
-          <Link href={`/records/mother/${motherId}`} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+          <Link href={`/records/mother/${motherId}`} className="btn btn-secondary btn-compact">
             Open PNC
           </Link>
         </div>
@@ -329,7 +329,7 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
       <div className="content-card">
         <div className="card-header">
           <span>Child Progress History</span>
-          <Link href={`/records/child/${motherId}`} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+          <Link href={`/records/child/${motherId}`} className="btn btn-secondary btn-compact">
             Open Child Record
           </Link>
         </div>

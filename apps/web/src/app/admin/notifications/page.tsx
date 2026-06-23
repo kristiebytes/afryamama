@@ -111,7 +111,7 @@ export default function AdminNotificationsPage() {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="action-row" style={{ marginTop: 0 }}>
           <button className="btn btn-primary" onClick={saveNotification}>Save Notification</button>
           <button className="btn btn-secondary" onClick={saveNotification}>Send Notification</button>
         </div>
@@ -122,15 +122,15 @@ export default function AdminNotificationsPage() {
           <span>History</span>
         </div>
 
-        <div style={{ display: 'grid', gap: '12px' }}>
+        <div className="stack-grid">
           {history.map((n) => (
-            <div key={n.id} style={{ borderLeft: '4px solid var(--primary)', padding: '14px 16px', borderRadius: '10px', background: 'var(--bg-secondary)' }}>
+            <div key={n.id} className="history-item">
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                 <div>
                   <strong>{n.title}</strong>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{n.category} | {n.date}</div>
                 </div>
-                <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => deleteNotification(n.id)}>
+                <button className="btn btn-secondary btn-compact" onClick={() => deleteNotification(n.id)}>
                   Delete
                 </button>
               </div>

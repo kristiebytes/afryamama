@@ -1,12 +1,15 @@
 import {
 	createUserWithEmailAndPassword,
+	sendPasswordResetEmail,
 	signInWithEmailAndPassword,
 	signOut,
+	updateProfile,
 	type User,
 } from 'firebase/auth';
 import {
 	collection,
 	doc,
+	getDoc,
 	getDocs,
 	limit,
 	query,
@@ -60,43 +63,23 @@ function readDateText(value: unknown): string | null {
 	return null;
 }
 
-function getMotherEmail(data: Record<string, unknown>): string {
-	return normalizeEmail(data.email ?? data.Email ?? data.userEmail ?? data.user_email);
-}
-
-function parseMotherCodeNumber(code: string): number {
-	const match = code.trim().toUpperCase().match(/^M(\d+)$/);
-	if (!match) return 0;
-	return Number.parseInt(match[1], 10) || 0;
+function getMotherDocId(email: string): string {
+	return normalizeEmail(email).replace(/[^a-z0-9]/gi, '_');
 }
 
 function formatMotherCode(sequence: number): string {
 	return `M${String(sequence).padStart(3, '0')}`;
 }
 
-async function getNextMotherCode(): Promise<string> {
-	try {
-		const snapshots = await Promise.all([
-			getDocs(collection(firebaseDb, 'mothers')),
-			getDocs(collection(firebaseDb, 'Mothers')),
-		]);
-
-		const docs = snapshots.flatMap((snapshot) => snapshot.docs);
-		const maxSequence = docs.reduce((maxValue, item) => {
-			const data = item.data() as Record<string, unknown>;
-			const code = readText(data.motherCode || data.code || data.mother_code, '');
-			const parsed = parseMotherCodeNumber(code);
-			return parsed > maxValue ? parsed : maxValue;
-		}, 0);
-
-		return formatMotherCode(maxSequence + 1);
-	} catch {
-		return formatMotherCode(Math.floor(Date.now() / 1000));
-	}
-}
-
 async function loadMotherDocByEmail(email: string) {
 	const normalizedEmail = normalizeEmail(email);
+	const docId = getMotherDocId(normalizedEmail);
+
+	const directDoc = await getDoc(doc(firebaseDb, 'mothers', docId));
+	if (directDoc.exists()) {
+		return directDoc.data() as Record<string, unknown>;
+	}
+
 	const emailFields = ['email', 'Email', 'userEmail', 'user_email'];
 	const collections = ['mothers', 'Mothers'];
 	const candidateEmails = [email.trim(), normalizedEmail].filter(Boolean);
@@ -113,16 +96,6 @@ async function loadMotherDocByEmail(email: string) {
 				}
 			}
 		}
-
-		const fullSnapshot = await getDocs(collection(firebaseDb, collectionName));
-		const matchedDoc = fullSnapshot.docs.find((item) => {
-			const data = item.data() as Record<string, unknown>;
-			return getMotherEmail(data) === normalizedEmail;
-		});
-
-		if (matchedDoc) {
-			return matchedDoc.data() as Record<string, unknown>;
-		}
 	}
 
 	return null;
@@ -132,12 +105,14 @@ async function ensureMotherProfileForUser(user: User): Promise<void> {
 	const email = normalizeEmail(user.email);
 	if (!email) return;
 
-	const existing = await loadMotherDocByEmail(email);
-	const docId = email.replace(/[^a-z0-9]/gi, '_');
+	const docId = getMotherDocId(email);
+	const motherDocRef = doc(firebaseDb, 'mothers', docId);
+	const motherDoc = await getDoc(motherDocRef);
 
-	if (existing) {
+	if (motherDoc.exists()) {
+		const existing = motherDoc.data() as Record<string, unknown>;
 		await setDoc(
-			doc(firebaseDb, 'mothers', docId),
+			motherDocRef,
 			{
 				email,
 				motherCode: readText(existing.motherCode || existing.code || existing.mother_code, ''),
@@ -150,10 +125,10 @@ async function ensureMotherProfileForUser(user: User): Promise<void> {
 	}
 
 	const displayName = user.displayName?.trim() || nameFromEmail(email);
-	const motherCode = await getNextMotherCode();
+	const motherCode = formatMotherCode(Math.floor(Date.now() / 1000));
 
 	await setDoc(
-		doc(firebaseDb, 'mothers', docId),
+		motherDocRef,
 		{
 			email,
 			motherCode,
@@ -171,16 +146,37 @@ async function ensureMotherProfileForUser(user: User): Promise<void> {
 	);
 }
 
+async function safeEnsureMotherProfileForUser(user: User): Promise<void> {
+	try {
+		await ensureMotherProfileForUser(user);
+	} catch (error) {
+		console.warn('Mother profile bootstrap failed:', error);
+	}
+}
+
 export async function loginWithFirebase(email: string, password: string) {
 	const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
-	await ensureMotherProfileForUser(credential.user);
+	await safeEnsureMotherProfileForUser(credential.user);
 	return credential;
 }
 
-export async function signUpMotherWithFirebase(email: string, password: string) {
+export async function signUpMotherWithFirebase(fullName: string, email: string, password: string) {
 	const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
-	await ensureMotherProfileForUser(credential.user);
+	const displayName = fullName.trim();
+	if (displayName) {
+		await updateProfile(credential.user, { displayName });
+	}
+	await safeEnsureMotherProfileForUser(credential.user);
 	return credential;
+}
+
+export async function sendMotherPasswordReset(email: string) {
+	const normalizedEmail = email.trim().toLowerCase();
+	if (!normalizedEmail) {
+		throw new Error('Please enter your email address first.');
+	}
+
+	await sendPasswordResetEmail(firebaseAuth, normalizedEmail);
 }
 
 export async function logoutFromFirebase() {

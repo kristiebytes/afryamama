@@ -7,10 +7,16 @@ import { firebaseDb } from '@/lib/firebaseClient';
 interface UserRow {
   name: string;
   email: string;
+  phone?: string;
+  status?: string;
 }
 
 export default function AdminUsersPage() {
   const [role, setRole] = useState<'mother' | 'doctor'>('mother');
+  const [nameFilter, setNameFilter] = useState('');
+  const [emailFilter, setEmailFilter] = useState('');
+  const [phoneFilter, setPhoneFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [mothers, setMothers] = useState<UserRow[]>([]);
   const [doctors, setDoctors] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,9 +38,14 @@ export default function AdminUsersPage() {
 
         const motherRows: UserRow[] = motherSnapshot.docs.map((doc) => {
           const data = doc.data();
+          const firstName = (data.firstName || data.first_name || '').toString().trim();
+          const lastName = (data.lastName || data.last_name || '').toString().trim();
+          const fullName = `${firstName} ${lastName}`.trim();
           return {
-            name: data.full_name || data.name || 'Unknown Mother',
+            name: fullName || data.full_name || data.name || 'Unknown Mother',
             email: data.email || '-',
+            phone: data.phone || '-',
+            status: (data.status || 'Active').toString(),
           };
         });
 
@@ -46,6 +57,8 @@ export default function AdminUsersPage() {
           return {
             name: fullName || data.name || 'Unknown Doctor',
             email: data.email || '-',
+            phone: data.phone || '-',
+            status: (data.status || 'Inactive').toString(),
           };
         });
 
@@ -60,6 +73,23 @@ export default function AdminUsersPage() {
   }, []);
 
   const rows = useMemo(() => (role === 'mother' ? mothers : doctors), [doctors, mothers, role]);
+
+  const filteredRows = useMemo(() => {
+    const nameTerm = nameFilter.trim().toLowerCase();
+    const emailTerm = emailFilter.trim().toLowerCase();
+    const phoneTerm = phoneFilter.trim().toLowerCase();
+    const statusTerm = statusFilter.trim().toLowerCase();
+
+    if (!nameTerm && !emailTerm && !phoneTerm && !statusTerm) return rows;
+
+    return rows.filter((row) => {
+      const nameMatches = !nameTerm || row.name.toLowerCase().includes(nameTerm);
+      const emailMatches = !emailTerm || row.email.toLowerCase().includes(emailTerm);
+      const phoneMatches = !phoneTerm || (row.phone || '').toLowerCase().includes(phoneTerm);
+      const statusMatches = !statusTerm || (row.status || '').toLowerCase().includes(statusTerm);
+      return nameMatches && emailMatches && phoneMatches && statusMatches;
+    });
+  }, [rows, nameFilter, emailFilter, phoneFilter, statusFilter]);
 
   async function addClinician() {
     if (!doctorFirstName.trim() || !doctorLastName.trim() || !doctorEmail.trim()) {
@@ -80,13 +110,35 @@ export default function AdminUsersPage() {
         phone: doctorPhone.trim(),
         role: 'DOCTOR',
         createdAt: serverTimestamp(),
-        status: 'Active',
+        updatedAt: serverTimestamp(),
+        activationCodeSentAt: serverTimestamp(),
+        status: 'Inactive',
       });
+
+      let sentCode = false;
+      let sendCodeErrorMessage = '';
+      try {
+        const response = await fetch('/api/clinician-activation/send-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: doctorEmail.trim().toLowerCase() }),
+        });
+        const payload = (await response.json()) as { message?: string };
+        sentCode = response.ok;
+        if (!response.ok) {
+          sendCodeErrorMessage = payload.message || 'Activation email could not be sent.';
+        }
+      } catch {
+        sentCode = false;
+        sendCodeErrorMessage = 'Activation email request failed. Please check network/server status.';
+      }
 
       setDoctors((prev) => [
         {
           name: `${doctorFirstName.trim()} ${doctorLastName.trim()}`.trim(),
           email: doctorEmail.trim().toLowerCase(),
+          phone: doctorPhone.trim() || '-',
+          status: 'Inactive',
         },
         ...prev,
       ]);
@@ -95,7 +147,14 @@ export default function AdminUsersPage() {
       setDoctorLastName('');
       setDoctorEmail('');
       setDoctorPhone('');
-      setDoctorMessage('Clinician added successfully.');
+      setDoctorMessage(
+        sentCode
+          ? 'Clinician added as Inactive. Activation link sent to clinician email.'
+          : 'Clinician added as Inactive, but activation link email could not be sent.'
+      );
+      if (!sentCode && sendCodeErrorMessage) {
+        setDoctorError(sendCodeErrorMessage);
+      }
     } catch {
       setDoctorError('Could not add clinician. Please try again.');
     } finally {
@@ -176,22 +235,68 @@ export default function AdminUsersPage() {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Phone</th>
+                <th>Status</th>
+              </tr>
+              <tr className="table-filter-row">
+                <th>
+                  <input
+                    id="users-filter-name"
+                    className="table-filter-input"
+                    value={nameFilter}
+                    onChange={(event) => setNameFilter(event.target.value)}
+                    placeholder="Search name"
+                  />
+                </th>
+                <th>
+                  <input
+                    id="users-filter-email"
+                    className="table-filter-input"
+                    value={emailFilter}
+                    onChange={(event) => setEmailFilter(event.target.value)}
+                    placeholder="Search email"
+                  />
+                </th>
+                <th>
+                  <input
+                    id="users-filter-phone"
+                    className="table-filter-input"
+                    value={phoneFilter}
+                    onChange={(event) => setPhoneFilter(event.target.value)}
+                    placeholder="Search phone"
+                  />
+                </th>
+                <th>
+                  <input
+                    id="users-filter-status"
+                    className="table-filter-input"
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                    placeholder="Search status"
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={2}>Loading users from Firestore...</td>
+                  <td colSpan={4}>Loading users from Firestore...</td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={2}>No users found.</td>
+                  <td colSpan={4}>No users found for the selected filter.</td>
                 </tr>
               ) : (
-                rows.map((row, index) => (
+                filteredRows.map((row, index) => (
                   <tr key={`${row.email}-${index}`}>
-                    <td style={{ fontWeight: '600' }}>{row.name}</td>
+                    <td className="table-cell-strong">{row.name}</td>
                     <td>{row.email}</td>
+                    <td>{row.phone || '-'}</td>
+                    <td>
+                      <span className={`badge ${String(row.status || '').toLowerCase() === 'active' ? 'badge-success' : 'badge-warning'}`}>
+                        {row.status || 'Inactive'}
+                      </span>
+                    </td>
                   </tr>
                 ))
               )}

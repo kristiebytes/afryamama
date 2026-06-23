@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -32,6 +31,7 @@ const SEX_OPTIONS = [
   { label: 'Male', value: 'Male' },
   { label: 'Other', value: 'Other' },
 ];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function formatDate(value: Date): string {
   const year = value.getFullYear();
@@ -45,6 +45,10 @@ function parseDate(value: string): Date {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return new Date();
   return parsed;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
 }
 
 function childCountFromType(multipleBirthType: MultipleBirthType): number {
@@ -83,6 +87,7 @@ export default function MotherProfileSetupScreen({
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
   const [datePickerChildIndex, setDatePickerChildIndex] = useState<number | null>(null);
   const [datePickerValue, setDatePickerValue] = useState<Date>(new Date());
+  const [sexDropdownChildIndex, setSexDropdownChildIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -115,24 +120,53 @@ export default function MotherProfileSetupScreen({
     setDatePickerValue(parseDate(currentValue));
   }
 
-  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
-    const activeIndex = datePickerChildIndex;
+  function changeCalendarMonth(step: number) {
+    setDatePickerValue((current) => new Date(current.getFullYear(), current.getMonth() + step, 1));
+  }
 
-    if (event.type === 'dismissed') {
-      setDatePickerChildIndex(null);
-      return;
-    }
+  function selectCalendarDate(day: number) {
+    if (datePickerChildIndex === null) return;
 
-    if (selectedDate) {
-      setDatePickerValue(selectedDate);
-      if (activeIndex !== null) {
-        updateChildField(activeIndex, 'birthDate', formatDate(selectedDate));
+    const selected = new Date(datePickerValue.getFullYear(), datePickerValue.getMonth(), day);
+    updateChildField(datePickerChildIndex, 'birthDate', formatDate(selected));
+    setDatePickerValue(selected);
+    setDatePickerChildIndex(null);
+  }
+
+  function renderCalendarDays() {
+    const year = datePickerValue.getFullYear();
+    const month = datePickerValue.getMonth();
+    const totalDays = daysInMonth(year, month);
+
+    const rows: number[][] = [];
+    let current = 1;
+    while (current <= totalDays) {
+      const row: number[] = [];
+      for (let i = 0; i < 7; i += 1) {
+        if (current <= totalDays) {
+          row.push(current);
+          current += 1;
+        } else {
+          row.push(0);
+        }
       }
+      rows.push(row);
     }
 
-    if (Platform.OS !== 'ios') {
-      setDatePickerChildIndex(null);
-    }
+    return rows.map((row, rowIndex) => (
+      <View key={`row-${rowIndex}`} style={styles.calendarRow}>
+        {row.map((day, dayIndex) => (
+          <TouchableOpacity
+            key={`day-${rowIndex}-${dayIndex}`}
+            style={[styles.calendarDay, day === 0 ? styles.calendarDayEmpty : null]}
+            onPress={() => day > 0 && selectCalendarDate(day)}
+            disabled={day === 0}
+          >
+            <Text style={styles.calendarDayText}>{day > 0 ? day : ''}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    ));
   }
 
   async function handleSave() {
@@ -294,16 +328,30 @@ export default function MotherProfileSetupScreen({
                   />
 
                   <Text style={styles.label}>Sex</Text>
-                  <View style={styles.pickerWrapper}>
-                    <Picker
-                      selectedValue={child.sex}
-                      onValueChange={(value) => updateChildField(index, 'sex', String(value))}
-                    >
+                  <TouchableOpacity
+                    style={styles.inputPressable}
+                    onPress={() => setSexDropdownChildIndex((current) => (current === index ? null : index))}
+                  >
+                    <Text style={child.sex ? styles.inputPressableText : styles.inputPlaceholderText}>
+                      {child.sex || 'Select sex'}
+                    </Text>
+                  </TouchableOpacity>
+                  {sexDropdownChildIndex === index ? (
+                    <View style={styles.dropdownMenu}>
                       {SEX_OPTIONS.map((option) => (
-                        <Picker.Item key={option.value || 'empty'} label={option.label} value={option.value} />
+                        <TouchableOpacity
+                          key={`${option.value || 'empty'}-${index}`}
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            updateChildField(index, 'sex', option.value);
+                            setSexDropdownChildIndex(null);
+                          }}
+                        >
+                          <Text style={styles.dropdownItemText}>{option.label}</Text>
+                        </TouchableOpacity>
                       ))}
-                    </Picker>
-                  </View>
+                    </View>
+                  ) : null}
 
                   <Text style={styles.label}>Date of Birth</Text>
                   <TouchableOpacity
@@ -329,22 +377,32 @@ export default function MotherProfileSetupScreen({
             </>
           )}
 
-          {datePickerChildIndex !== null ? (
-            <View style={styles.datePickerContainer}>
-              <DateTimePicker
-                value={datePickerValue}
-                mode="date"
-                display="default"
-                maximumDate={new Date()}
-                onChange={handleDateChange}
-              />
-              {Platform.OS === 'ios' ? (
+          <Modal
+            animationType="fade"
+            transparent
+            visible={datePickerChildIndex !== null}
+            onRequestClose={() => setDatePickerChildIndex(null)}
+          >
+            <View style={styles.modalBackdrop}>
+              <View style={styles.calendarCard}>
+                <View style={styles.calendarHeader}>
+                  <TouchableOpacity onPress={() => changeCalendarMonth(-1)}>
+                    <Text style={styles.calendarNav}>◀</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.calendarTitle}>
+                    {MONTH_NAMES[datePickerValue.getMonth()]} {datePickerValue.getFullYear()}
+                  </Text>
+                  <TouchableOpacity onPress={() => changeCalendarMonth(1)}>
+                    <Text style={styles.calendarNav}>▶</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.calendarGrid}>{renderCalendarDays()}</View>
                 <TouchableOpacity style={styles.dateDoneButton} onPress={() => setDatePickerChildIndex(null)}>
-                  <Text style={styles.dateDoneButtonText}>Done</Text>
+                  <Text style={styles.dateDoneButtonText}>Close</Text>
                 </TouchableOpacity>
-              ) : null}
+              </View>
             </View>
-          ) : null}
+          </Modal>
 
           <Text style={styles.label}>County *</Text>
           <TextInput style={styles.input} value={county} onChangeText={setCounty} placeholder="Nairobi" placeholderTextColor="#94a3b8" />
@@ -450,13 +508,6 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontSize: 15,
   },
-  pickerWrapper: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
   inputPressable: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
@@ -473,13 +524,81 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 15,
   },
-  datePickerContainer: {
-    marginTop: 10,
+  dropdownMenu: {
+    marginTop: 6,
     borderWidth: 1,
     borderColor: '#d8e2ef',
-    borderRadius: 12,
-    padding: 8,
+    borderRadius: 10,
     backgroundColor: '#ffffff',
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  dropdownItemText: {
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  calendarCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d8e2ef',
+    padding: 14,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  calendarTitle: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  calendarNav: {
+    color: '#2563eb',
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  calendarGrid: {
+    gap: 6,
+  },
+  calendarRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  calendarDay: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  calendarDayEmpty: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+  calendarDayText: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '600',
   },
   dateDoneButton: {
     alignSelf: 'flex-end',
