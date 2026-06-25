@@ -9,7 +9,7 @@ type ResetBody = {
 };
 
 async function updateAdminPasswordByEmail(email: string, password: string): Promise<boolean> {
-  const collections = ['admins', 'Admins'];
+  const collections = ['Admins', 'admins'];
   const emailFields = ['email', 'Email', 'userEmail', 'user_email'];
   const candidates = [email.trim(), email.trim().toLowerCase()];
 

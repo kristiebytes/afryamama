@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, doc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useAuth } from '@/components/AuthProvider';
 import { firebaseDb } from '@/lib/firebaseClient';
 
@@ -37,35 +37,55 @@ export default function AdminProfilePage() {
         return;
       }
 
-      const collections = ['admins', 'Admins'];
-      let snapshot = null;
+      const canonicalCollection = 'Admins';
+      const canonicalDocId = user.uid || user.email || 'admin-profile';
+      const canonicalRef = doc(firebaseDb, canonicalCollection, canonicalDocId);
+      const canonicalDoc = await getDoc(canonicalRef);
+
+      if (canonicalDoc.exists()) {
+        const data = canonicalDoc.data();
+        setProfile({
+          firstName: data.firstName || data.first_name || '',
+          lastName: data.lastName || data.last_name || '',
+          email: data.email || user.email,
+          phone: data.phone || '',
+          title: data.title || data.role || data.Role || 'ADMIN',
+        });
+        setDocumentPath({ collectionName: canonicalCollection, docId: canonicalDocId });
+        setLoading(false);
+        return;
+      }
+
+      const collections = ['Admins', 'admins'];
+      let matchedData: Record<string, unknown> | null = null;
+      let matchedPath: { collectionName: string; docId: string } | null = null;
 
       for (const name of collections) {
         const candidate = await getDocs(
           query(collection(firebaseDb, name), where('email', '==', user.email), limit(1))
         );
         if (!candidate.empty) {
-          snapshot = candidate;
-          setDocumentPath({ collectionName: name, docId: candidate.docs[0].id });
+          matchedData = candidate.docs[0].data() as Record<string, unknown>;
+          matchedPath = { collectionName: name, docId: candidate.docs[0].id };
           break;
         }
       }
 
-      if (!snapshot || snapshot.empty) {
-        setProfile((prev) => ({ ...prev, email: user.email || prev.email }));
-        setDocumentPath({ collectionName: 'admins', docId: user.uid || user.email || 'admin-profile' });
+      if (!matchedData || !matchedPath) {
+        setProfile((prev) => ({ ...prev, email: user.email || prev.email, title: prev.title || 'ADMIN' }));
+        setDocumentPath({ collectionName: canonicalCollection, docId: canonicalDocId });
         setLoading(false);
         return;
       }
 
-      const data = snapshot.docs[0].data();
       setProfile({
-        firstName: data.firstName || data.first_name || '',
-        lastName: data.lastName || data.last_name || '',
-        email: data.email || user.email,
-        phone: data.phone || '',
-        title: data.title || data.role || data.Role || '',
+        firstName: matchedData.firstName || matchedData.first_name || '',
+        lastName: matchedData.lastName || matchedData.last_name || '',
+        email: matchedData.email || user.email,
+        phone: matchedData.phone || '',
+        title: matchedData.title || matchedData.role || matchedData.Role || 'ADMIN',
       });
+      setDocumentPath(matchedPath);
       setLoading(false);
     }
 
@@ -79,28 +99,31 @@ export default function AdminProfilePage() {
       return;
     }
 
-    const targetCollection = documentPath?.collectionName || 'admins';
+    const targetCollection = documentPath?.collectionName || 'Admins';
     const targetDocId = documentPath?.docId || user.uid || user.email;
+    const isNewDocument = !documentPath;
 
     setSaving(true);
     setSaveError(null);
     setSaveMessage(null);
 
     try {
-      await setDoc(
-        doc(firebaseDb, targetCollection, targetDocId),
-        {
-          firstName: profile.firstName.trim(),
-          lastName: profile.lastName.trim(),
-          email: user.email,
-          phone: profile.phone.trim(),
-          title: profile.title.trim(),
-          role: 'ADMIN',
-          updatedAt: serverTimestamp(),
-          uid: user.uid,
-        },
-        { merge: true }
-      );
+      const payload: Record<string, unknown> = {
+        firstName: profile.firstName.trim(),
+        lastName: profile.lastName.trim(),
+        email: user.email,
+        phone: profile.phone.trim(),
+        title: profile.title.trim(),
+        role: 'ADMIN',
+        updatedAt: serverTimestamp(),
+        uid: user.uid,
+      };
+
+      if (isNewDocument) {
+        payload.createdAt = serverTimestamp();
+      }
+
+      await setDoc(doc(firebaseDb, targetCollection, targetDocId), payload, { merge: true });
 
       setSaveMessage('Profile updated successfully.');
     } catch {

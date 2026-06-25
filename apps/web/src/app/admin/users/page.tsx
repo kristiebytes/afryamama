@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { firebaseDb } from '@/lib/firebaseClient';
 
 interface UserRow {
+  id?: string;
   name: string;
   email: string;
   phone?: string;
+  facility?: string;
   status?: string;
 }
 
@@ -16,6 +18,7 @@ export default function AdminUsersPage() {
   const [nameFilter, setNameFilter] = useState('');
   const [emailFilter, setEmailFilter] = useState('');
   const [phoneFilter, setPhoneFilter] = useState('');
+  const [facilityFilter, setFacilityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [mothers, setMothers] = useState<UserRow[]>([]);
   const [doctors, setDoctors] = useState<UserRow[]>([]);
@@ -25,8 +28,10 @@ export default function AdminUsersPage() {
   const [doctorLastName, setDoctorLastName] = useState('');
   const [doctorEmail, setDoctorEmail] = useState('');
   const [doctorPhone, setDoctorPhone] = useState('');
+  const [doctorFacility, setDoctorFacility] = useState('');
   const [doctorMessage, setDoctorMessage] = useState<string | null>(null);
   const [doctorError, setDoctorError] = useState<string | null>(null);
+  const [deletingDoctorId, setDeletingDoctorId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadUsers() {
@@ -42,9 +47,11 @@ export default function AdminUsersPage() {
           const lastName = (data.lastName || data.last_name || '').toString().trim();
           const fullName = `${firstName} ${lastName}`.trim();
           return {
+            id: doc.id,
             name: fullName || data.full_name || data.name || 'Unknown Mother',
             email: data.email || '-',
             phone: data.phone || '-',
+            facility: data.facility || '-',
             status: (data.status || 'Active').toString(),
           };
         });
@@ -55,9 +62,11 @@ export default function AdminUsersPage() {
           const lastName = data.lastName || data.last_name || '';
           const fullName = `${firstName} ${lastName}`.trim();
           return {
+            id: doc.id,
             name: fullName || data.name || 'Unknown Doctor',
             email: data.email || '-',
             phone: data.phone || '-',
+            facility: data.facility || '-',
             status: (data.status || 'Inactive').toString(),
           };
         });
@@ -78,18 +87,20 @@ export default function AdminUsersPage() {
     const nameTerm = nameFilter.trim().toLowerCase();
     const emailTerm = emailFilter.trim().toLowerCase();
     const phoneTerm = phoneFilter.trim().toLowerCase();
+    const facilityTerm = facilityFilter.trim().toLowerCase();
     const statusTerm = statusFilter.trim().toLowerCase();
 
-    if (!nameTerm && !emailTerm && !phoneTerm && !statusTerm) return rows;
+    if (!nameTerm && !emailTerm && !phoneTerm && !facilityTerm && !statusTerm) return rows;
 
     return rows.filter((row) => {
       const nameMatches = !nameTerm || row.name.toLowerCase().includes(nameTerm);
       const emailMatches = !emailTerm || row.email.toLowerCase().includes(emailTerm);
       const phoneMatches = !phoneTerm || (row.phone || '').toLowerCase().includes(phoneTerm);
+      const facilityMatches = !facilityTerm || (row.facility || '').toLowerCase().includes(facilityTerm);
       const statusMatches = !statusTerm || (row.status || '').toLowerCase().includes(statusTerm);
-      return nameMatches && emailMatches && phoneMatches && statusMatches;
+      return nameMatches && emailMatches && phoneMatches && facilityMatches && statusMatches;
     });
-  }, [rows, nameFilter, emailFilter, phoneFilter, statusFilter]);
+  }, [rows, nameFilter, emailFilter, phoneFilter, facilityFilter, statusFilter]);
 
   async function addClinician() {
     if (!doctorFirstName.trim() || !doctorLastName.trim() || !doctorEmail.trim()) {
@@ -103,11 +114,12 @@ export default function AdminUsersPage() {
     setDoctorMessage(null);
 
     try {
-      await addDoc(collection(firebaseDb, 'doctors'), {
+      const doctorRef = await addDoc(collection(firebaseDb, 'doctors'), {
         firstName: doctorFirstName.trim(),
         lastName: doctorLastName.trim(),
         email: doctorEmail.trim().toLowerCase(),
         phone: doctorPhone.trim(),
+        facility: doctorFacility.trim(),
         role: 'DOCTOR',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -135,9 +147,11 @@ export default function AdminUsersPage() {
 
       setDoctors((prev) => [
         {
+          id: doctorRef.id,
           name: `${doctorFirstName.trim()} ${doctorLastName.trim()}`.trim(),
           email: doctorEmail.trim().toLowerCase(),
           phone: doctorPhone.trim() || '-',
+          facility: doctorFacility.trim() || '-',
           status: 'Inactive',
         },
         ...prev,
@@ -147,6 +161,7 @@ export default function AdminUsersPage() {
       setDoctorLastName('');
       setDoctorEmail('');
       setDoctorPhone('');
+      setDoctorFacility('');
       setDoctorMessage(
         sentCode
           ? 'Clinician added as Inactive. Activation link sent to clinician email.'
@@ -159,6 +174,30 @@ export default function AdminUsersPage() {
       setDoctorError('Could not add clinician. Please try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteClinician(row: UserRow) {
+    if (!row.id) {
+      setDoctorError('Could not delete clinician: missing document id.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete clinician ${row.name} (${row.email})? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeletingDoctorId(row.id);
+    setDoctorError(null);
+    setDoctorMessage(null);
+
+    try {
+      await deleteDoc(doc(firebaseDb, 'doctors', row.id));
+      setDoctors((prev) => prev.filter((doctorRow) => doctorRow.id !== row.id));
+      setDoctorMessage(`Clinician ${row.name} deleted successfully.`);
+    } catch {
+      setDoctorError('Could not delete clinician. Please try again.');
+    } finally {
+      setDeletingDoctorId(null);
     }
   }
 
@@ -217,6 +256,12 @@ export default function AdminUsersPage() {
                 value={doctorPhone}
                 onChange={(event) => setDoctorPhone(event.target.value)}
               />
+              <input
+                className="form-input"
+                placeholder="Facility (optional)"
+                value={doctorFacility}
+                onChange={(event) => setDoctorFacility(event.target.value)}
+              />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -236,7 +281,9 @@ export default function AdminUsersPage() {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Phone</th>
+                <th>Facility</th>
                 <th>Status</th>
+                {role === 'doctor' ? <th>Actions</th> : null}
               </tr>
               <tr className="table-filter-row">
                 <th>
@@ -268,6 +315,15 @@ export default function AdminUsersPage() {
                 </th>
                 <th>
                   <input
+                    id="users-filter-facility"
+                    className="table-filter-input"
+                    value={facilityFilter}
+                    onChange={(event) => setFacilityFilter(event.target.value)}
+                    placeholder="Search facility"
+                  />
+                </th>
+                <th>
+                  <input
                     id="users-filter-status"
                     className="table-filter-input"
                     value={statusFilter}
@@ -275,28 +331,41 @@ export default function AdminUsersPage() {
                     placeholder="Search status"
                   />
                 </th>
+                {role === 'doctor' ? <th /> : null}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={4}>Loading users from Firestore...</td>
+                  <td colSpan={role === 'doctor' ? 6 : 5}>Loading users from Firestore...</td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No users found for the selected filter.</td>
+                  <td colSpan={role === 'doctor' ? 6 : 5}>No users found for the selected filter.</td>
                 </tr>
               ) : (
                 filteredRows.map((row, index) => (
-                  <tr key={`${row.email}-${index}`}>
+                  <tr key={row.id || `${row.email}-${index}`}>
                     <td className="table-cell-strong">{row.name}</td>
                     <td>{row.email}</td>
                     <td>{row.phone || '-'}</td>
+                    <td>{row.facility || '-'}</td>
                     <td>
                       <span className={`badge ${String(row.status || '').toLowerCase() === 'active' ? 'badge-success' : 'badge-warning'}`}>
                         {row.status || 'Inactive'}
                       </span>
                     </td>
+                    {role === 'doctor' ? (
+                      <td>
+                        <button
+                          className="btn btn-secondary btn-compact"
+                          onClick={() => deleteClinician(row)}
+                          disabled={deletingDoctorId === row.id}
+                        >
+                          {deletingDoctorId === row.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               )}

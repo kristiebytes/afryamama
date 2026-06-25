@@ -64,7 +64,7 @@ export default function TopbarAccountMenu({ role }: TopbarAccountMenuProps) {
         return;
       }
 
-      const collectionNames = role === 'ADMIN' ? ['admins', 'Admins'] : ['doctors', 'Doctors'];
+      const collectionNames = role === 'ADMIN' ? ['Admins', 'admins'] : ['doctors', 'Doctors'];
       let found: Record<string, unknown> | null = null;
 
       for (const collectionName of collectionNames) {

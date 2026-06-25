@@ -132,6 +132,7 @@ export async function resolveDashboardRole(user: FirebaseUser): Promise<Dashboar
     return 'DOCTOR';
   }
 
+  if (await existsInCollection('Admins', email, uid)) return 'ADMIN';
   if (await existsInCollection('admins', email, uid)) return 'ADMIN';
   if (await existsInCollection('doctors', email, uid)) {
     if (await isClinicianInactive(email, uid)) return null;

@@ -75,7 +75,7 @@ export default function AdminDashboard() {
           getDocs(collection(firebaseDb, 'mothers')),
           getDocs(collection(firebaseDb, 'notifications')),
           getDocs(collection(firebaseDb, 'users')),
-          getDocs(collection(firebaseDb, 'admins')),
+          getDocs(collection(firebaseDb, 'Admins')),
         ]);
 
         const usersRows = usersSnapshot.docs.map((docItem: QueryDocumentSnapshot<DocumentData>) => {
