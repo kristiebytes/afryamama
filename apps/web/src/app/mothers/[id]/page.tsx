@@ -14,6 +14,8 @@ interface MotherSummary {
   phone: string;
   status: string;
   edd: string;
+  childName: string;
+  childDob: string;
 }
 
 interface HistoryRow {
@@ -30,7 +32,25 @@ const emptyMother: MotherSummary = {
   phone: '-',
   status: '-',
   edd: '-',
+  childName: '-',
+  childDob: '-',
 };
+
+function asText(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function sameId(left: unknown, right: unknown): boolean {
+  const a = asText(left).toLowerCase();
+  const b = asText(right).toLowerCase();
+  return Boolean(a && b && a === b);
+}
+
+function sameText(left: unknown, right: unknown): boolean {
+  return sameId(left, right);
+}
 
 function toLabel(value: unknown, fallback = '-'): string {
   if (typeof value === 'string') {
@@ -59,6 +79,72 @@ function toDateLabel(value: unknown): string {
   return '-';
 }
 
+function parseDate(value: unknown): Date | null {
+  if (value && typeof value === 'object' && 'toDate' in (value as Record<string, unknown>)) {
+    try {
+      return (value as { toDate: () => Date }).toDate();
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function computeEddFromLmp(data: Record<string, unknown>): string {
+  const lmp = parseDate(data.lmp ?? data.lmpDate ?? data.lastMenstrualPeriod ?? data.last_menstrual_period);
+  if (!lmp) return '-';
+  const due = new Date(lmp.getTime() + 280 * 24 * 60 * 60 * 1000);
+  return due.toISOString().slice(0, 10);
+}
+
+function computeEddFromGestation(
+  maternalRows: Array<Record<string, unknown>>,
+  appointmentRows: Array<Record<string, unknown>>
+): string {
+  const ancCandidates = [
+    ...maternalRows.filter((row) => toLabel(row.recordType ?? row.type, '').toUpperCase().includes('ANC')),
+    ...appointmentRows.filter((row) => {
+      const type = toLabel(row.appointmentType ?? row.type ?? row.reason, '').toUpperCase();
+      return type.includes('ANC') || type.includes('ANTENATAL') || type.includes('PRENATAL');
+    }),
+  ];
+
+  for (const row of ancCandidates) {
+    const gestWeeksRaw = row.gestationWeeks ?? row.gestation ?? row.weeks;
+    const gestWeeks = typeof gestWeeksRaw === 'number' ? gestWeeksRaw : Number(gestWeeksRaw);
+    const visitDate = parseDate(row.visitDate ?? row.date ?? row.dateTime ?? row.createdAt);
+
+    if (!Number.isNaN(gestWeeks) && gestWeeks > 0 && visitDate) {
+      const remainingWeeks = Math.max(0, 40 - gestWeeks);
+      const due = new Date(visitDate.getTime() + remainingWeeks * 7 * 24 * 60 * 60 * 1000);
+      return due.toISOString().slice(0, 10);
+    }
+  }
+
+  return '-';
+}
+
+function computeEddFromPregnancies(pregnancyRows: Array<Record<string, unknown>>): string {
+  for (const row of pregnancyRows) {
+    const stored = toDateLabel(
+      row.estimatedDueDate ?? row.expectedDueDate ?? row.dueDate ?? row.edd ?? row.expected_delivery_date
+    );
+    if (stored !== '-') return stored;
+
+    const lmp = parseDate(row.lmp ?? row.lmpDate ?? row.lastMenstrualPeriod ?? row.last_menstrual_period);
+    if (lmp) {
+      const due = new Date(lmp.getTime() + 280 * 24 * 60 * 60 * 1000);
+      return due.toISOString().slice(0, 10);
+    }
+  }
+
+  return '-';
+}
+
 export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
   const [motherId, setMotherId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -79,11 +165,22 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
 
       try {
         const motherDoc = await getDoc(doc(firebaseDb, 'mothers', id));
+        let motherNameCandidates: string[] = [];
+        let motherPhone = '';
+        let motherData: Record<string, unknown> = {};
+
         if (motherDoc.exists()) {
           const data = motherDoc.data() as Record<string, unknown>;
+          motherData = data;
           const firstName = toLabel(data.firstName ?? data.first_name, '');
           const lastName = toLabel(data.lastName ?? data.last_name, '');
           const fullName = `${firstName} ${lastName}`.trim();
+          motherNameCandidates = [
+            fullName,
+            toLabel(data.full_name ?? data.name, ''),
+            asText(data.displayName),
+          ].filter((value) => value.length > 0);
+          motherPhone = asText(data.phone);
 
           setMother({
             id,
@@ -91,14 +188,18 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
             phone: toLabel(data.phone),
             status: toLabel(data.status ?? data.maternalStatus ?? data.stage, 'UNKNOWN'),
             edd: toLabel(data.edd ?? data.expectedDeliveryDate ?? data.expected_delivery_date),
+            childName: '-',
+            childDob: '-',
           });
         }
 
-        const [appointmentsSnapshot, maternalSnapshot, childrenSnapshot, growthSnapshot, immunizationSnapshot] =
+        const [appointmentsSnapshot, maternalSnapshot, pregnanciesSnapshot, childrenSnapshot, childSnapshot, growthSnapshot, immunizationSnapshot] =
           await Promise.all([
             getDocs(collection(firebaseDb, 'appointments')),
             getDocs(collection(firebaseDb, 'maternalRecords')),
+            getDocs(collection(firebaseDb, 'pregnancies')),
             getDocs(collection(firebaseDb, 'children')),
+            getDocs(collection(firebaseDb, 'child')),
             getDocs(collection(firebaseDb, 'growthRecords')),
             getDocs(collection(firebaseDb, 'immunizations')),
           ]);
@@ -110,6 +211,32 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
         const maternalRows = maternalSnapshot.docs
           .map((docItem) => ({ id: docItem.id, ...(docItem.data() as Record<string, unknown>) }))
           .filter((row) => toLabel(row.motherId ?? row.mother_id, '') === id);
+
+        const pregnancyRows = pregnanciesSnapshot.docs
+          .map((docItem) => ({ id: docItem.id, ...(docItem.data() as Record<string, unknown>) }))
+          .filter((row) => sameId(row.motherId ?? row.mother_id, id));
+
+        const computedEdd = (() => {
+          const fromStored = motherData
+            ? toLabel(
+                motherData.edd ??
+                  motherData.expectedDeliveryDate ??
+                  motherData.expected_delivery_date ??
+                  motherData.estimatedDueDate ??
+                  motherData.dueDate,
+                '-'
+              )
+            : '-';
+          if (fromStored !== '-') return fromStored;
+
+          const fromLmp = computeEddFromLmp(motherData);
+          if (fromLmp !== '-') return fromLmp;
+
+          const fromPregnancy = computeEddFromPregnancies(pregnancyRows);
+          if (fromPregnancy !== '-') return fromPregnancy;
+
+          return computeEddFromGestation(maternalRows, appointmentRows);
+        })();
 
         const ancFromMaternal = maternalRows
           .filter((row) => {
@@ -163,9 +290,29 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
             status: toLabel(row.status, 'Pending'),
           }));
 
-        const children = childrenSnapshot.docs
+        const children = [...childrenSnapshot.docs, ...childSnapshot.docs]
           .map((docItem) => ({ id: docItem.id, ...(docItem.data() as Record<string, unknown>) }))
-          .filter((row) => toLabel(row.motherId ?? row.mother_id, '') === id);
+          .filter(
+            (row) =>
+              sameId(row.motherId, id) ||
+              sameId(row.mother_id, id) ||
+              sameId(row.motherDocId, id) ||
+              sameId(row.parentId, id) ||
+              sameId(row.motherRef, id) ||
+              motherNameCandidates.some((name) =>
+                sameText(row.motherName, name) ||
+                sameText(row.motherFullName, name) ||
+                sameText(row.parentName, name)
+              ) ||
+              (motherPhone ? sameText(row.motherPhone, motherPhone) || sameText(row.parentPhone, motherPhone) : false)
+          );
+
+        const childNames = children
+          .map((row) => asText(row.fullName ?? row.name ?? row.full_name ?? row.childName))
+          .filter((name) => name.length > 0);
+        const childDob = children.length
+          ? toDateLabel(children[0].birthDate ?? children[0].dateOfBirth ?? children[0].dob ?? children[0].date_of_birth)
+          : '-';
 
         const childIds = new Set(children.map((child) => child.id));
 
@@ -192,6 +339,12 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
           }));
 
         if (isMounted) {
+          setMother((prev) => ({
+            ...prev,
+            edd: computedEdd,
+            childName: childNames.length ? childNames.join(', ') : '-',
+            childDob,
+          }));
           setAncHistory([...ancFromMaternal, ...ancFromAppointments]);
           setPncHistory([...pncFromMaternal, ...pncFromAppointments]);
           setChildHistory([...childFromGrowth, ...childFromImmunization]);
@@ -208,15 +361,18 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
     };
   }, [params]);
 
-  const summaryText = useMemo(() => {
-    return `ANC: ${ancHistory.length} | PNC: ${pncHistory.length} | Child: ${childHistory.length}`;
-  }, [ancHistory.length, childHistory.length, pncHistory.length]);
-
   const statusUpper = mother.status.trim().toUpperCase();
   const isPrenatal = statusUpper.includes('PRENATAL') || statusUpper.includes('PREG');
   const isPostnatal = statusUpper.includes('POSTNATAL') || statusUpper.includes('POST NATAL') || statusUpper.includes('PNC');
   const showAncAction = isPrenatal || (!isPrenatal && !isPostnatal);
   const showPostnatalActions = isPostnatal;
+
+  const summaryText = useMemo(() => {
+    if (showPostnatalActions) {
+      return `PNC: ${pncHistory.length} | Child: ${childHistory.length}`;
+    }
+    return `ANC: ${ancHistory.length}`;
+  }, [ancHistory.length, childHistory.length, pncHistory.length, showPostnatalActions]);
 
   return (
     <main className="main-content">
@@ -242,9 +398,11 @@ export default function MotherDetailsPage({ params }: MotherDetailsPageProps) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
             <div>ID: {mother.id}</div>
             <div>Name: {mother.name}</div>
+            {isPostnatal ? <div>Child: {mother.childName}</div> : null}
+            {isPostnatal ? <div>Child DOB: {mother.childDob}</div> : null}
             <div>Phone: {mother.phone}</div>
             <div>Status: {mother.status}</div>
-            <div>Estimated Delivery: {mother.edd}</div>
+            {!isPostnatal ? <div>Estimated Delivery: {mother.edd}</div> : null}
             <div>{summaryText}</div>
           </div>
         )}

@@ -89,6 +89,56 @@ const defaultImmunizationForm: ImmunizationFormState = {
   nextVaccineDate: '',
 };
 
+function asText(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function pickField(data: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in data) return data[key];
+  }
+
+  const loweredMap = new Map<string, unknown>();
+  Object.entries(data).forEach(([key, value]) => {
+    loweredMap.set(key.toLowerCase(), value);
+  });
+
+  for (const key of keys) {
+    const found = loweredMap.get(key.toLowerCase());
+    if (found !== undefined) return found;
+  }
+
+  return undefined;
+}
+
+function sameId(left: unknown, right: unknown): boolean {
+  const a = asText(left).toLowerCase();
+  const b = asText(right).toLowerCase();
+  return Boolean(a && b && a === b);
+}
+
+function toDateLabel(value: unknown): string {
+  if (value && typeof value === 'object' && 'toDate' in (value as Record<string, unknown>)) {
+    try {
+      return (value as { toDate: () => Date }).toDate().toISOString().slice(0, 10);
+    } catch {
+      return '-';
+    }
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '-';
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return trimmed;
+  }
+
+  return '-';
+}
+
 export default function ChildRecordPage({ params }: ChildRecordPageProps) {
   const { user } = useAuth();
   const [motherId, setMotherId] = useState('');
@@ -116,35 +166,71 @@ export default function ChildRecordPage({ params }: ChildRecordPageProps) {
       setMotherId(id);
 
       try {
-        const [mothersSnapshot, childrenSnapshot, immunizationSnapshot, growthSnapshot, growthAltSnapshot] = await Promise.all([
+        const [mothersSnapshot, childrenSnapshot, childSnapshot, immunizationSnapshot, growthSnapshot, growthAltSnapshot] = await Promise.all([
           getDocs(collection(firebaseDb, 'mothers')),
           getDocs(collection(firebaseDb, 'children')),
+          getDocs(collection(firebaseDb, 'child')),
           getDocs(collection(firebaseDb, 'immunizations')),
           getDocs(collection(firebaseDb, 'growthRecords')),
           getDocs(collection(firebaseDb, 'growth_records')),
         ]);
 
         const motherDoc = mothersSnapshot.docs.find((item) => item.id === id);
-        const motherName = motherDoc?.data().full_name || motherDoc?.data().name || '-';
+        const motherData = motherDoc?.data() as Record<string, unknown> | undefined;
+        const motherFirstName = asText(pickField(motherData || {}, ['firstName', 'first_name']));
+        const motherLastName = asText(pickField(motherData || {}, ['lastName', 'last_name']));
+        const motherCombinedName = `${motherFirstName} ${motherLastName}`.trim();
+        const motherNameFromMother =
+          motherCombinedName ||
+          asText(pickField(motherData || {}, ['full_name', 'name'])) ||
+          '-';
+        const motherNameCandidates = [
+          motherCombinedName,
+          asText(pickField(motherData || {}, ['full_name', 'name'])),
+        ].filter((value) => value.length > 0);
+        const motherPhone = asText(motherData?.phone);
 
-        const childDoc = childrenSnapshot.docs.find((item) => {
-          const data = item.data();
-          return data.motherId === id || data.mother_id === id;
+        const allChildDocs = [...childrenSnapshot.docs, ...childSnapshot.docs];
+        const matchingChildren = allChildDocs.filter((item) => {
+          const data = item.data() as Record<string, unknown>;
+          const childMotherId = pickField(data, ['motherId', 'mother_id', 'motherDocId', 'parentId']);
+          const childMotherName = pickField(data, ['motherName', 'parentName']);
+          const childMotherPhone = pickField(data, ['motherPhone', 'parentPhone']);
+
+          return (
+            sameId(childMotherId, id) ||
+            (motherNameCandidates.length > 0 && motherNameCandidates.some((name) => sameId(childMotherName, name))) ||
+            (motherPhone && sameId(childMotherPhone, motherPhone))
+          );
         });
 
+        const childDoc = matchingChildren[0];
+
         if (childDoc) {
-          const child = childDoc.data();
-          const dob = child.dateOfBirth || child.dob || '-';
+          const child = childDoc.data() as Record<string, unknown>;
+          const dob = toDateLabel(
+            pickField(child, ['birthDate', 'dateOfBirth', 'dob'])
+          );
           const ageInWeeks = dob !== '-'
             ? Math.max(0, Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 7)))
             : null;
 
+          const resolvedMotherName =
+            asText(pickField(child, ['motherName', 'parentName'])) || motherNameFromMother || '-';
+
+          const childName = asText(
+            pickField(child, ['fullName', 'name', 'childName'])
+          );
+          const childSex = asText(pickField(child, ['sex', 'gender']));
+          const childBirthWeight = pickField(child, ['birthWeightKg', 'birthWeight']);
+          const birthWeightLabel = asText(childBirthWeight) ? `${asText(childBirthWeight)} kg` : '-';
+
           setSummary({
-            childName: child.name || 'Unknown Child',
-            motherName,
+            childName: childName || 'Unknown Child',
+            motherName: resolvedMotherName,
             dob,
-            sex: child.gender || child.sex || '-',
-            birthWeight: child.birthWeight ? `${child.birthWeight} kg` : '-',
+            sex: childSex || '-',
+            birthWeight: birthWeightLabel,
             ageWeeks: ageInWeeks,
             ageMonths: ageInWeeks === null ? null : Math.floor(ageInWeeks / 4),
             childId: childDoc.id,
@@ -180,7 +266,7 @@ export default function ChildRecordPage({ params }: ChildRecordPageProps) {
 
           setImmunizations(rows);
         } else {
-          setSummary((prev) => ({ ...prev, motherName }));
+          setSummary((prev) => ({ ...prev, motherName: motherNameFromMother }));
         }
       } finally {
         if (isMounted) setLoading(false);

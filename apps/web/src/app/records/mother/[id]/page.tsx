@@ -13,6 +13,7 @@ interface MotherPncPageProps {
 
 interface MotherPncRecord {
   motherName: string;
+  childName: string;
   motherId: string;
   dob: string;
   deliveryDate: string;
@@ -61,6 +62,7 @@ const defaultPncForm: PncFormState = {
 
 const emptyRecord: MotherPncRecord = {
   motherName: 'Unknown Mother',
+  childName: '-',
   motherId: '-',
   dob: '-',
   deliveryDate: '-',
@@ -69,6 +71,58 @@ const emptyRecord: MotherPncRecord = {
   postpartumWeeks: null,
   notes: 'No notes available.',
 };
+
+function asText(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  return '';
+}
+
+function resolveMotherName(data: Record<string, unknown>, fallback = 'Unknown Mother'): string {
+  const firstName = asText(data.firstName ?? data.first_name);
+  const lastName = asText(data.lastName ?? data.last_name);
+  const combined = `${firstName} ${lastName}`.trim();
+  if (combined) return combined;
+
+  const direct = asText(data.full_name ?? data.name ?? data.displayName);
+  return direct || fallback;
+}
+
+function sameId(left: unknown, right: unknown): boolean {
+  const a = asText(left).toLowerCase();
+  const b = asText(right).toLowerCase();
+  return Boolean(a && b && a === b);
+}
+
+function asDateText(value: unknown): string {
+  if (value && typeof value === 'object' && 'toDate' in (value as Record<string, unknown>)) {
+    try {
+      return ((value as { toDate: () => Date }).toDate().toISOString().slice(0, 10));
+    } catch {
+      return '';
+    }
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return trimmed;
+  }
+
+  return '';
+}
+
+function resolveChildDob(data: Record<string, unknown>): string {
+  return asDateText(data.birthDate ?? data.dateOfBirth ?? data.dob ?? data.date_of_birth ?? data.birth_date) || '-';
+}
+
+function sameText(left: unknown, right: unknown): boolean {
+  const a = asText(left).toLowerCase();
+  const b = asText(right).toLowerCase();
+  return Boolean(a && b && a === b);
+}
 
 export default function MotherPncPage({ params }: MotherPncPageProps) {
   const { user } = useAuth();
@@ -94,17 +148,58 @@ export default function MotherPncPage({ params }: MotherPncPageProps) {
 
       try {
         const motherDoc = await getDoc(doc(firebaseDb, 'mothers', motherId));
-        const maternalSnapshot = await getDocs(collection(firebaseDb, 'maternalRecords'));
+        const [maternalSnapshot, childrenSnapshot, childSnapshot] = await Promise.all([
+          getDocs(collection(firebaseDb, 'maternalRecords')),
+          getDocs(collection(firebaseDb, 'children')),
+          getDocs(collection(firebaseDb, 'child')),
+        ]);
 
         const maternalRows = maternalSnapshot.docs
           .map((item) => ({ id: item.id, ...item.data() }))
           .filter((row: any) => row.motherId === motherId || row.mother_id === motherId);
 
         const latest = (maternalRows[0] || {}) as Record<string, unknown>;
+        const maternalMotherName = asText(latest.motherName) || 'Unknown Mother';
         const pncRows = maternalRows.filter((row: any) => {
           const type = String(row.recordType || row.type || '').toUpperCase();
           return type.includes('PNC') || type.includes('POSTNATAL');
         });
+
+        const motherData = motherDoc.exists() ? (motherDoc.data() as Record<string, unknown>) : {};
+        const motherNameCandidates = [
+          resolveMotherName(motherData, ''),
+          asText(motherData.full_name),
+          asText(motherData.name),
+          asText(motherData.displayName),
+        ].filter((value) => value.length > 0);
+        const motherPhone = asText(motherData.phone);
+
+        const allChildDocs = [...childrenSnapshot.docs, ...childSnapshot.docs];
+
+        const childRows = allChildDocs
+          .map((item) => ({ id: item.id, ...item.data() }))
+          .filter(
+            (row: any) =>
+              sameId(row.motherId, motherId) ||
+              sameId(row.mother_id, motherId) ||
+              sameId(row.motherDocId, motherId) ||
+              sameId(row.parentId, motherId) ||
+              sameId(row.motherRef, motherId) ||
+              motherNameCandidates.some((name) =>
+                sameText(row.motherName, name) ||
+                sameText(row.motherFullName, name) ||
+                sameText(row.parentName, name)
+              ) ||
+              (motherPhone ? sameText(row.motherPhone, motherPhone) || sameText(row.parentPhone, motherPhone) : false)
+          );
+
+        const childNames = childRows
+          .map((row: any) => row.fullName || row.name || row.full_name || row.childName)
+          .filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0);
+
+        const childDob = childRows.length
+          ? resolveChildDob(childRows[0] as Record<string, unknown>)
+          : '-';
 
         const visitRows: PncVisitRow[] = pncRows.map((row: any) => ({
           id: row.id,
@@ -131,11 +226,21 @@ export default function MotherPncPage({ params }: MotherPncPageProps) {
 
           nextRecord = {
             ...nextRecord,
-            motherName: data.full_name || data.name || 'Unknown Mother',
-            dob: data.dateOfBirth || data.dob || '-',
+            motherName: resolveMotherName(data as Record<string, unknown>, maternalMotherName),
+            childName: childNames.length
+              ? childNames.join(', ')
+              : asText(data.childName ?? data.babyName ?? data.child_name) || '-',
+            dob: childDob,
             deliveryDate,
             gravidaPara: data.gravidaPara || data.obstetricSummary || '-',
             postpartumWeeks,
+          };
+        } else {
+          nextRecord = {
+            ...nextRecord,
+            motherName: maternalMotherName,
+            childName: childNames.length ? childNames.join(', ') : '-',
+            dob: childDob,
           };
         }
 
@@ -273,10 +378,9 @@ export default function MotherPncPage({ params }: MotherPncPageProps) {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
             <div>Name: {record.motherName}</div>
+            <div>Child: {record.childName}</div>
             <div>ID: {id || record.motherId}</div>
-            <div>DOB: {record.dob}</div>
-            <div>Delivered: {record.deliveryDate}</div>
-            <div>Obstetric Summary: {record.gravidaPara}</div>
+            <div>Child DOB: {record.dob}</div>
             <div>PNC Visits: {record.pncVisits}</div>
           </div>
         )}
