@@ -54,6 +54,11 @@ export default function TimelineScreen({ email, onBack }: TimelineScreenProps) {
 
   return (
     <View style={styles.container}>
+      <View style={styles.decorWrap} pointerEvents="none">
+        <View style={styles.orbA} />
+        <View style={styles.orbB} />
+      </View>
+
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>← Back</Text>
@@ -109,17 +114,42 @@ export default function TimelineScreen({ email, onBack }: TimelineScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
+    backgroundColor: '#f3f7fc',
     paddingTop: 48,
+  },
+  decorWrap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  orbA: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+    top: -70,
+    right: -70,
+  },
+  orbB: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    top: 40,
+    left: -90,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    marginHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#d8e2ef',
-    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d4e2f4',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    marginBottom: 10,
   },
   backBtn: {
     marginRight: 16,
@@ -130,21 +160,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   title: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '700',
+    color: '#10233f',
+    fontSize: 19,
+    fontWeight: '800',
   },
   content: {
-    padding: 24,
+    paddingHorizontal: 20,
     paddingBottom: 36,
   },
   heroCard: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#c7d7ef',
-    borderRadius: 16,
-    padding: 16,
+    borderColor: '#cadcf3',
+    borderRadius: 20,
+    padding: 18,
     marginBottom: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
   },
   heroTag: {
     color: '#0ea5e9',
@@ -170,15 +205,15 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#d4e2f4',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fbff',
   },
   filterChipActive: {
-    borderColor: '#2563eb',
-    backgroundColor: '#dbeafe',
+    borderColor: '#0ea5e9',
+    backgroundColor: '#e0f2fe',
   },
   filterChipText: {
     color: '#334155',
@@ -196,10 +231,15 @@ const styles = StyleSheet.create({
   rowCard: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d8e2ef',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
+    borderColor: '#d7e3f2',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
   },
   rowTop: {
     flexDirection: 'row',

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
-import { collection, getDocs, limit, query, where, firebaseDb } from '@/lib/firebaseClient';
+import { addDoc, collection, getDocs, limit, query, where, firebaseDb } from '@/lib/firebaseClient';
 
 type DocSnapshotLike = {
   id: string;
@@ -12,7 +12,6 @@ type DocSnapshotLike = {
 
 interface DashboardMetrics {
   activeMothers: number;
-  activePregnancies: number;
   todaysAppointments: number;
   infantsMonitored: number;
 }
@@ -28,9 +27,18 @@ interface AppointmentRow {
   recordLink: string;
 }
 
+interface MotherOption {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  stage: 'PRENATAL' | 'POSTNATAL';
+  pregnancyWeek: number | null;
+  babyAgeMonths: number | null;
+}
+
 const emptyMetrics: DashboardMetrics = {
   activeMothers: 0,
-  activePregnancies: 0,
   todaysAppointments: 0,
   infantsMonitored: 0,
 };
@@ -70,6 +78,15 @@ function toAgeLabel(value: unknown): string {
   return age >= 0 ? String(age) : '-';
 }
 
+function isTodayAppointment(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+
+  const now = new Date();
+  return parsed.toDateString() === now.toDateString();
+}
+
 export default function DoctorDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -82,6 +99,65 @@ export default function DoctorDashboard() {
   const [timeFilter, setTimeFilter] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [doctorDocId, setDoctorDocId] = useState('');
+  const [motherOptions, setMotherOptions] = useState<MotherOption[]>([]);
+  const [selectedMotherId, setSelectedMotherId] = useState('');
+  const [appointmentDate, setAppointmentDate] = useState('');
+  const [appointmentTime, setAppointmentTime] = useState('09:00');
+  const [appointmentReason, setAppointmentReason] = useState('Routine clinic review');
+  const [appointmentStage, setAppointmentStage] = useState<'PRENATAL' | 'POSTNATAL'>('PRENATAL');
+  const [creating, setCreating] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const selectedMother = useMemo(
+    () => motherOptions.find((item) => item.id === selectedMotherId) || null,
+    [motherOptions, selectedMotherId]
+  );
+
+
+  async function createSingleAppointment() {
+    if (!user?.email || !selectedMother) {
+      setActionMessage('Select a mother first.');
+      return;
+    }
+
+    if (!appointmentDate.trim()) {
+      setActionMessage('Choose appointment date.');
+      return;
+    }
+
+    setCreating(true);
+    setActionMessage('');
+
+    try {
+      const dateTimeIso = new Date(`${appointmentDate}T${appointmentTime || '09:00'}:00`).toISOString();
+      await addDoc(collection(firebaseDb, 'appointments'), {
+        motherId: selectedMother.id,
+        motherName: selectedMother.fullName,
+        motherEmail: selectedMother.email,
+        motherPhone: selectedMother.phone,
+        doctorId: doctorDocId || user.uid,
+        doctorUid: user.uid,
+        doctorEmail: user.email,
+        doctorName,
+        stage: appointmentStage,
+        reason: appointmentReason || 'Routine clinic review',
+        status: 'PENDING',
+        dateTime: dateTimeIso,
+        appointmentDate: dateTimeIso,
+        appointmentTime: appointmentTime || '09:00',
+        createdAt: new Date().toISOString(),
+        source: 'DOCTOR_MANUAL',
+      });
+
+      setActionMessage('Appointment created successfully.');
+    } catch {
+      setActionMessage('Could not create appointment.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -97,6 +173,7 @@ export default function DoctorDashboard() {
 
         if (!doctorsSnapshot.empty) {
           const doctorData = doctorsSnapshot.docs[0].data() as Record<string, unknown>;
+          setDoctorDocId(doctorsSnapshot.docs[0].id);
           const firstName = (doctorData.firstName || doctorData.first_name || '').toString().trim();
           const lastName = (doctorData.lastName || doctorData.last_name || '').toString().trim();
           const fullName = `${firstName} ${lastName}`.trim();
@@ -105,21 +182,47 @@ export default function DoctorDashboard() {
           setDoctorName(user.displayName || user.email || 'Doctor');
         }
 
-        const [mothersSnapshot, pregnanciesSnapshot, childrenSnapshot, allAppointmentsSnapshot] = await Promise.all([
+        const [mothersSnapshot, childrenSnapshot, allAppointmentsSnapshot] = await Promise.all([
           getDocs(collection(firebaseDb, 'mothers')),
-          getDocs(collection(firebaseDb, 'pregnancies')),
           getDocs(collection(firebaseDb, 'children')),
           getDocs(collection(firebaseDb, 'appointments')),
         ]);
 
         const motherAgeById = new Map<string, string>();
+        const mappedMothers: MotherOption[] = mothersSnapshot.docs.map((docItem: DocSnapshotLike) => {
+          const data = docItem.data() as Record<string, unknown>;
+          const firstName = (data.firstName || data.first_name || '').toString().trim();
+          const lastName = (data.lastName || data.last_name || '').toString().trim();
+          const fullName =
+            `${firstName} ${lastName}`.trim() ||
+            (data.fullName || data.name || data.motherName || 'Mother').toString();
+
+          const stageRaw = (data.stage || data.motherStage || 'PRENATAL').toString().toUpperCase();
+          const stage: 'PRENATAL' | 'POSTNATAL' = stageRaw === 'POSTNATAL' ? 'POSTNATAL' : 'PRENATAL';
+          const pregnancyWeek = Number.parseInt((data.pregnancyWeek || data.week || '').toString(), 10);
+          const babyAgeMonths = Number.parseInt((data.babyAgeMonths || data.infantAgeMonths || '').toString(), 10);
+
+          return {
+            id: docItem.id,
+            fullName,
+            email: (data.email || data.Email || data.userEmail || '').toString(),
+            phone: (data.phone || data.phoneNumber || data.contact || '-').toString(),
+            stage,
+            pregnancyWeek: Number.isNaN(pregnancyWeek) ? null : pregnancyWeek,
+            babyAgeMonths: Number.isNaN(babyAgeMonths) ? null : babyAgeMonths,
+          };
+        });
+
+        setMotherOptions(mappedMothers);
+        if (!selectedMotherId && mappedMothers.length > 0) {
+          setSelectedMotherId(mappedMothers[0].id);
+          setAppointmentStage(mappedMothers[0].stage);
+        }
+
         mothersSnapshot.docs.forEach((docItem: DocSnapshotLike) => {
           const data = docItem.data() as Record<string, unknown>;
           motherAgeById.set(docItem.id, toAgeLabel(data.dateOfBirth || data.dob));
         });
-
-        const today = new Date();
-        const todayKey = today.toISOString().slice(0, 10);
 
         const doctorAppointments = allAppointmentsSnapshot.docs.filter((docItem: DocSnapshotLike) => {
           const data = docItem.data() as Record<string, unknown>;
@@ -142,16 +245,14 @@ export default function DoctorDashboard() {
           return candidateEmails.includes(user.email!.trim().toLowerCase()) || candidateUids.includes(user.uid);
         });
 
-        const todaysAppointments = doctorAppointments.filter((docItem: DocSnapshotLike) => {
+        const todaysDoctorAppointments = doctorAppointments.filter((docItem: DocSnapshotLike) => {
           const data = docItem.data() as Record<string, unknown>;
-          const rawDate = (data.dateTime || data.appointmentTime || data.date || '').toString();
-          if (!rawDate) return false;
-          const parsed = new Date(rawDate);
-          if (Number.isNaN(parsed.getTime())) return false;
-          return parsed.toISOString().slice(0, 10) === todayKey;
-        }).length;
+          return isTodayAppointment(data.dateTime || data.appointmentDate || data.date || data.scheduledAt || data.appointmentTime);
+        });
 
-        const rows: AppointmentRow[] = doctorAppointments.slice(0, 8).map((docItem: DocSnapshotLike) => {
+        const todaysAppointments = todaysDoctorAppointments.length;
+
+        const rows: AppointmentRow[] = todaysDoctorAppointments.slice(0, 8).map((docItem: DocSnapshotLike) => {
           const data = docItem.data() as Record<string, unknown>;
           const firstName = (data.motherFirstName || data.firstName || '').toString().trim();
           const lastName = (data.motherLastName || data.lastName || '').toString().trim();
@@ -174,7 +275,6 @@ export default function DoctorDashboard() {
 
         setMetrics({
           activeMothers: mothersSnapshot.size,
-          activePregnancies: pregnanciesSnapshot.size,
           todaysAppointments,
           infantsMonitored: childrenSnapshot.size,
         });
@@ -185,7 +285,7 @@ export default function DoctorDashboard() {
     }
 
     loadDashboardData();
-  }, [user?.email, user?.uid, user?.displayName]);
+  }, [user?.email, user?.uid, user?.displayName, selectedMotherId]);
 
   const welcomeName = useMemo(() => {
     if (!doctorName) return 'Doctor';
@@ -232,14 +332,6 @@ export default function DoctorDashboard() {
           </div>
 
           <div className="stat-card">
-            <span className="stat-title">Active Pregnancies</span>
-            <div className="stat-value">{loading ? '...' : metrics.activePregnancies.toLocaleString()}</div>
-            <span className="stat-desc">
-              Current pregnancy records
-            </span>
-          </div>
-
-          <div className="stat-card">
             <span className="stat-title">Today's Appointments</span>
             <div className="stat-value">{loading ? '...' : metrics.todaysAppointments.toLocaleString()}</div>
             <span className="stat-desc">
@@ -254,6 +346,79 @@ export default function DoctorDashboard() {
               Children loaded from Firestore
             </span>
           </div>
+        </div>
+
+        <div className="content-card">
+          <div className="card-header">
+            <span>Create Appointments (Doctor Side)</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 12 }}>
+            <label>
+              <div className="text-muted">Mother</div>
+              <select
+                className="table-filter-input"
+                value={selectedMotherId}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  setSelectedMotherId(nextId);
+                  const nextMother = motherOptions.find((item) => item.id === nextId);
+                  if (nextMother) {
+                    setAppointmentStage(nextMother.stage);
+                  }
+                }}
+              >
+                {motherOptions.map((mother) => (
+                  <option key={mother.id} value={mother.id}>
+                    {mother.fullName} ({mother.stage})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <div className="text-muted">Stage</div>
+              <select
+                className="table-filter-input"
+                value={appointmentStage}
+                onChange={(event) => setAppointmentStage(event.target.value as 'PRENATAL' | 'POSTNATAL')}
+              >
+                <option value="PRENATAL">Prenatal</option>
+                <option value="POSTNATAL">Postnatal</option>
+              </select>
+            </label>
+
+            <label>
+              <div className="text-muted">Date</div>
+              <input className="table-filter-input" type="date" value={appointmentDate} onChange={(event) => setAppointmentDate(event.target.value)} />
+            </label>
+
+            <label>
+              <div className="text-muted">Time</div>
+              <input className="table-filter-input" type="time" value={appointmentTime} onChange={(event) => setAppointmentTime(event.target.value)} />
+            </label>
+
+            <label style={{ gridColumn: '1 / -1' }}>
+              <div className="text-muted">Reason</div>
+              <input className="table-filter-input" value={appointmentReason} onChange={(event) => setAppointmentReason(event.target.value)} placeholder="Reason for appointment" />
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <button className="btn btn-primary btn-compact" onClick={createSingleAppointment} disabled={creating || !selectedMotherId}>
+              {creating ? 'Creating...' : 'Create Appointment'}
+            </button>
+          </div>
+
+          {selectedMother ? (
+            <p className="page-subtitle" style={{ marginBottom: 10 }}>
+              {selectedMother.stage === 'POSTNATAL'
+                ? `Postnatal schedule will use baby age (${selectedMother.babyAgeMonths ?? 0} months) to generate appointments.`
+                : `Prenatal schedule will use pregnancy week (${selectedMother.pregnancyWeek ?? 0}) to generate appointments.`}
+            </p>
+          ) : null}
+
+          {actionMessage ? <p className="page-subtitle" style={{ marginBottom: 12 }}>{actionMessage}</p> : null}
         </div>
 
         <div className="content-card">

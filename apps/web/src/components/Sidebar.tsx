@@ -17,6 +17,7 @@ export default function Sidebar({ currentPath, role, userName = 'Dr. Jane Mwangi
     { name: 'Dashboard', path: dashboardPath },
     { name: 'Mothers Registry', path: '/mothers' },
     { name: 'Appointments', path: '/appointments' },
+    { name: 'Emergency Requests', path: '/doctor/emergency' },
     { name: 'Medical Records', path: '/records' },
     { name: 'Health Reports', path: '/reports' },
   ];

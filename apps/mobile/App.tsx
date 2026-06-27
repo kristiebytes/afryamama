@@ -12,8 +12,6 @@ import ImmunizationScreen from './screens/ImmunizationScreen';
 import WellnessTipsScreen from './screens/WellnessTipsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import MotherProfileSetupScreen from './screens/MotherProfileSetupScreen';
-import ScheduleScreen from './screens/ScheduleScreen';
-import TimelineScreen from './screens/TimelineScreen';
 import MilestonesScreen from './screens/MilestonesScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import GrowthMonitoringScreen from './screens/GrowthMonitoringScreen';
@@ -36,8 +34,6 @@ type Screen =
   | 'WELLNESS'
   | 'PROFILE_SETUP'
   | 'PROFILE'
-  | 'SCHEDULE'
-  | 'TIMELINE'
   | 'MILESTONES'
   | 'NOTIFICATIONS'
   | 'GROWTH';
@@ -142,10 +138,6 @@ export default function App() {
         );
       case 'PROFILE':
         return <ProfileScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
-      case 'SCHEDULE':
-        return <ScheduleScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
-      case 'TIMELINE':
-        return <TimelineScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'MILESTONES':
         return <MilestonesScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'APPOINTMENTS':

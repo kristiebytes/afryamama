@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import {
+  assignDoctorForFacility,
   type ChildProfile,
   type MotherProfile,
   type MotherStage,
@@ -88,8 +89,37 @@ export default function MotherProfileSetupScreen({
   const [datePickerChildIndex, setDatePickerChildIndex] = useState<number | null>(null);
   const [datePickerValue, setDatePickerValue] = useState<Date>(new Date());
   const [sexDropdownChildIndex, setSexDropdownChildIndex] = useState<number | null>(null);
+  const [doctorPreview, setDoctorPreview] = useState<string>('');
+  const [doctorPreviewFacility, setDoctorPreviewFacility] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function previewDoctorMatch() {
+      const trimmedFacility = facility.trim();
+      if (!trimmedFacility) {
+        if (active) {
+          setDoctorPreview('');
+          setDoctorPreviewFacility('');
+        }
+        return;
+      }
+
+      const match = await assignDoctorForFacility(trimmedFacility);
+      if (!active) return;
+
+      setDoctorPreview(match?.doctorName || '');
+      setDoctorPreviewFacility(match?.facility || trimmedFacility);
+    }
+
+    previewDoctorMatch();
+
+    return () => {
+      active = false;
+    };
+  }, [facility]);
 
   function updateMultipleBirthType(nextType: MultipleBirthType) {
     const nextCount = childCountFromType(nextType);
@@ -409,6 +439,13 @@ export default function MotherProfileSetupScreen({
 
           <Text style={styles.label}>Preferred Facility *</Text>
           <TextInput style={styles.input} value={facility} onChangeText={setFacility} placeholder="AfyaMama Clinic" placeholderTextColor="#94a3b8" />
+          {doctorPreview ? (
+            <View style={styles.matchCard}>
+              <Text style={styles.matchTag}>CARE MATCH</Text>
+              <Text style={styles.matchTitle}>Your doctor is {doctorPreview}</Text>
+              <Text style={styles.matchText}>Matched from {doctorPreviewFacility} based on your preferred clinic.</Text>
+            </View>
+          ) : null}
 
           <Text style={styles.label}>Emergency Contact Name</Text>
           <TextInput style={styles.input} value={emergencyContactName} onChangeText={setEmergencyContactName} placeholder="John Doe" placeholderTextColor="#94a3b8" />
@@ -507,6 +544,32 @@ const styles = StyleSheet.create({
     padding: 12,
     color: '#0f172a',
     fontSize: 15,
+  },
+  matchCard: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    backgroundColor: '#f0f9ff',
+    padding: 12,
+  },
+  matchTag: {
+    color: '#0369a1',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  matchTitle: {
+    color: '#0c4a6e',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  matchText: {
+    color: '#075985',
+    fontSize: 12,
+    lineHeight: 17,
   },
   inputPressable: {
     backgroundColor: '#f8fafc',

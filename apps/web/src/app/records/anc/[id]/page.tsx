@@ -67,6 +67,19 @@ const defaultFormState: AncFormState = {
   notes: '',
 };
 
+function readText(value: unknown, fallback = ''): string {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number') return String(value);
+  return fallback;
+}
+
+function resolveMotherName(data: Record<string, unknown>): string {
+  const firstName = readText(data.firstName || data.first_name, '');
+  const lastName = readText(data.lastName || data.last_name, '');
+  const fullFromSplit = `${firstName} ${lastName}`.trim();
+  return readText(data.fullName || data.full_name || data.name || data.displayName, fullFromSplit || 'Unknown Mother');
+}
+
 export default function AncDetailsPage({ params }: AncDetailsPageProps) {
   const { user } = useAuth();
   const [motherId, setMotherId] = useState('');
@@ -95,28 +108,40 @@ export default function AncDetailsPage({ params }: AncDetailsPageProps) {
       setMotherId(id);
 
       try {
-        const motherDoc = await getDoc(doc(firebaseDb, 'mothers', id));
-        if (motherDoc.exists()) {
-          const data = motherDoc.data();
+        const [motherPrimaryDoc, motherFallbackDoc] = await Promise.all([
+          getDoc(doc(firebaseDb, 'mothers', id)),
+          getDoc(doc(firebaseDb, 'Mothers', id)),
+        ]);
+
+        const motherSource = motherPrimaryDoc.exists() ? motherPrimaryDoc : motherFallbackDoc;
+        if (motherSource.exists()) {
+          const data = motherSource.data() as Record<string, unknown>;
+          const gestationValue = readText(data.gestation || data.gestationWeeks || data.pregnancyWeek || data.week, '');
+
           setMother({
-            name: data.full_name || data.name || 'Unknown Mother',
-            phone: data.phone || '-',
-            gestation: data.gestation || data.gestationWeeks ? `${data.gestation || data.gestationWeeks} weeks` : '-',
-            expectedDelivery: data.expectedDeliveryDate || data.edd || '-',
+            name: resolveMotherName(data),
+            phone: readText(data.phone || data.phoneNumber, '-'),
+            gestation: gestationValue ? `${gestationValue} weeks` : '-',
+            expectedDelivery: readText(data.expectedDeliveryDate || data.edd || data.deliveryDate, '-'),
           });
         }
 
-        const appointmentsSnapshot = await getDocs(collection(firebaseDb, 'appointments'));
-        const appointmentRows: AncVisitRow[] = appointmentsSnapshot.docs
+        const maternalRecordsSnapshot = await getDocs(collection(firebaseDb, 'maternalRecords'));
+        const appointmentRows: AncVisitRow[] = maternalRecordsSnapshot.docs
           .map((item) => ({ id: item.id, ...item.data() }))
-          .filter((item: any) => (item.motherId || item.mother_id) === id)
+          .filter((item: any) => {
+            const sameMother = (item.motherId || item.mother_id) === id;
+            const visitType = String(item.visitType || item.type || item.recordType || '').toUpperCase();
+            const isAnc = visitType.includes('ANC') || visitType.includes('ANTENATAL');
+            return sameMother && isAnc;
+          })
           .map((item: any) => ({
             id: item.id,
             contact: item.contactNo || item.contact || 'ANC Contact',
-            date: item.date || '-',
+            date: item.checkupDate || item.date || '-',
             bp: item.bp || item.bloodPressure || '-',
             fhr: item.fhr ? `${item.fhr} bpm` : item.fetalHeartRate ? `${item.fetalHeartRate} bpm` : '-',
-            notes: item.notes || item.reason || 'No notes recorded.',
+            notes: item.notes || item.clinicalObservations || 'No notes recorded.',
           }));
 
         setVisits(appointmentRows);
@@ -152,19 +177,18 @@ export default function AncDetailsPage({ params }: AncDetailsPageProps) {
 
     setSaving(true);
     try {
-      const created = await addDoc(collection(firebaseDb, 'appointments'), {
+      const created = await addDoc(collection(firebaseDb, 'maternalRecords'), {
         motherId,
         mother_id: motherId,
         motherName: mother.name,
         doctorEmail: user?.email || '',
         doctorUid: user?.uid || '',
-        appointmentType: 'ANC',
+        visitType: 'ANC',
+        recordType: 'ANC',
         type: 'ANC',
-        reason: `ANC ${form.contactNo}`,
-        status: 'CONFIRMED',
         contactNo: form.contactNo,
+        checkupDate: form.date,
         date: form.date,
-        dateTime: form.date,
         gestationWeeks: Number(form.gestationWeeks),
         facility: form.facility,
         weight: form.weight ? Number(form.weight) : null,
@@ -179,8 +203,11 @@ export default function AncDetailsPage({ params }: AncDetailsPageProps) {
         ifa: form.ifa,
         tt: form.tt,
         nextVisit: form.nextVisit,
+        nextAppointmentDate: form.nextVisit,
+        clinicalObservations: form.notes,
         notes: form.notes,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
 
       if (form.nextVisit) {

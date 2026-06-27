@@ -32,6 +32,12 @@ export const doctorMenuItems: MenuNode[] = [
   },
   {
     type: 'item',
+    text: 'Emergency Requests',
+    href: '/doctor/emergency',
+    icon: 'bi-exclamation-triangle',
+  },
+  {
+    type: 'item',
     text: 'Medical Records',
     href: '/records',
     icon: 'bi-journal-medical',

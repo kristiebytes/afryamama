@@ -11,6 +11,8 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
   const [records, setRecords] = useState<MobileRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const readingCount = records.length;
+
   useEffect(() => {
     async function loadRecords() {
       try {
@@ -35,14 +37,20 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Prenatal Checkups</Text>
+        <Text style={styles.title}>Health Reports</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
-          <Text style={styles.heroTag}>MOTHER HEALTH</Text>
+          <Text style={styles.heroTag}>CARE RECORDS</Text>
           <Text style={styles.heroTitle}>Clinical Records</Text>
-          <Text style={styles.heroText}>View your checkup history, vitals, and care notes in one place.</Text>
+          <Text style={styles.heroText}>Doctor-reported ANC and PNC visit details are shown here.</Text>
+          {!loading ? (
+            <View style={styles.metricPill}>
+              <Text style={styles.metricLabel}>Entries</Text>
+              <Text style={styles.metricValue}>{readingCount}</Text>
+            </View>
+          ) : null}
         </View>
 
         <Text style={styles.sectionTitle}>Maternal Progress Logs</Text>
@@ -50,7 +58,7 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
         {loading ? <Text style={styles.emptyText}>Loading records...</Text> : null}
 
         {!loading && records.length === 0 ? (
-          <Text style={styles.emptyText}>No prenatal records found in Firestore.</Text>
+          <Text style={styles.emptyText}>No ANC/PNC reports found yet.</Text>
         ) : null}
 
         {records.map((rec) => (
@@ -94,39 +102,91 @@ export default function RecordsScreen({ email, onBack }: RecordsProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
-    paddingTop: 48,
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    gap: 14,
+    paddingTop: 52,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#d8e2ef',
-    backgroundColor: '#ffffff',
+    paddingHorizontal: 20,
+    backgroundColor: '#3a0440',
   },
   backBtn: {
-    marginRight: 16,
+    marginRight: 4,
   },
   backBtnText: {
-    color: '#2563eb',
-    fontSize: 16,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
     fontWeight: '600',
   },
   title: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '700',
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
   },
   content: {
-    padding: 24,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 34,
+  },
+  heroCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#EBD6ED',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#55075c',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  heroTag: {
+    color: '#55075c',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    marginBottom: 6,
+  },
+  heroTitle: {
+    color: '#1a1a2e',
+    fontSize: 19,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  heroText: {
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  metricPill: {
+    marginTop: 14,
+    alignSelf: 'flex-start',
+    backgroundColor: '#fdf5f9',
+    borderColor: '#EBD6ED',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  metricLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  metricValue: {
+    color: '#1a1a2e',
+    fontSize: 16,
+    fontWeight: '800',
   },
   sectionTitle: {
-    color: '#0f172a',
-    fontSize: 16,
+    color: '#1a1a2e',
+    fontSize: 15,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emptyText: {
     color: '#94a3b8',
@@ -136,14 +196,14 @@ const styles = StyleSheet.create({
   recordCard: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d8e2ef',
+    borderColor: '#EBD6ED',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
+    marginBottom: 12,
+    shadowColor: '#55075c',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
   },
   cardHeader: {
@@ -156,14 +216,14 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   recordDate: {
-    color: '#0f172a',
-    fontSize: 15,
-    fontWeight: '700',
+    color: '#1a1a2e',
+    fontSize: 16,
+    fontWeight: '800',
   },
   clinicName: {
-    color: '#0ea5e9',
+    color: '#55075c',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   vitalsRow: {
     flexDirection: 'row',
@@ -172,10 +232,10 @@ const styles = StyleSheet.create({
   },
   vitalBox: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#dbe4ef',
+    borderColor: '#EBD6ED',
     padding: 10,
     alignItems: 'center',
     marginHorizontal: 4,
@@ -196,10 +256,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   notesSection: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#dbe4ef',
+    borderColor: '#EBD6ED',
     padding: 12,
   },
   notesTitle: {

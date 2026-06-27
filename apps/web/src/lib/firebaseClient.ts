@@ -10,6 +10,7 @@ export {
 } from 'firebase/auth';
 export type { User } from 'firebase/auth';
 export {
+  addDoc,
   collection,
   doc,
   getDoc,
