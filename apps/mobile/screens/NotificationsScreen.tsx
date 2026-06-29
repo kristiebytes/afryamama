@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { doc, updateDoc } from 'firebase/firestore';
 import { fetchNotifications, type MobileNotification } from '../lib/firestoreData';
+import { firebaseDb } from '../lib/firebaseClient';
 
 interface NotificationsScreenProps {
   email: string;
@@ -12,6 +14,25 @@ export default function NotificationsScreen({ email, onBack }: NotificationsScre
   const [items, setItems] = useState<MobileNotification[]>([]);
   const unreadCount = items.filter((item) => !item.read).length;
 
+  async function markAllAsRead(rows: MobileNotification[]) {
+    const unreadRows = rows.filter((item) => !item.read);
+    if (unreadRows.length === 0) return;
+
+    setItems((current) => current.map((item) => ({ ...item, read: true })));
+
+    const collectionNames = ['notifications', 'Notifications'];
+    for (const row of unreadRows) {
+      for (const collectionName of collectionNames) {
+        try {
+          await updateDoc(doc(firebaseDb, collectionName, row.id), { read: true });
+          break;
+        } catch {
+          // Try next collection variant.
+        }
+      }
+    }
+  }
+
   useEffect(() => {
     async function loadNotifications() {
       try {
@@ -22,6 +43,7 @@ export default function NotificationsScreen({ email, onBack }: NotificationsScre
 
         const rows = await fetchNotifications(email.toLowerCase());
         setItems(rows);
+        await markAllAsRead(rows);
       } finally {
         setLoading(false);
       }
@@ -32,18 +54,19 @@ export default function NotificationsScreen({ email, onBack }: NotificationsScre
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={styles.hero}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Notifications</Text>
+        <Text style={styles.heroSub}>Important reminders and care alerts from your clinic.</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
           <Text style={styles.heroTag}>CARE ALERTS</Text>
-          <Text style={styles.heroTitle}>Notifications</Text>
-          <Text style={styles.heroText}>Important reminders and updates from your care journey appear here.</Text>
+          <Text style={styles.heroTitle}>Your Updates</Text>
+          <Text style={styles.heroText}>Unread items are marked and automatically set as read when opened.</Text>
           {!loading ? (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryText}>{unreadCount} unread alerts</Text>
@@ -52,10 +75,18 @@ export default function NotificationsScreen({ email, onBack }: NotificationsScre
           ) : null}
         </View>
 
-        {loading ? <Text style={styles.emptyText}>Loading notifications...</Text> : null}
+        {loading ? (
+          <>
+            <View style={styles.skeletonCard} />
+            <View style={styles.skeletonCard} />
+          </>
+        ) : null}
 
         {!loading && items.length === 0 ? (
-          <Text style={styles.emptyText}>No notifications found in Firestore.</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No notifications yet</Text>
+            <Text style={styles.emptyText}>You are all caught up. New alerts will appear here.</Text>
+          </View>
         ) : null}
 
         {items.map((item) => (
@@ -79,57 +110,65 @@ export default function NotificationsScreen({ email, onBack }: NotificationsScre
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eef3f9',
-    paddingTop: 48,
+    backgroundColor: '#F8FAFC',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#d8e2ef',
-    backgroundColor: '#ffffff',
+  hero: {
+    paddingTop: 52,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    backgroundColor: '#3a0440',
   },
   backBtn: {
-    marginRight: 16,
+    marginBottom: 12,
   },
   backBtnText: {
-    color: '#2563eb',
-    fontSize: 16,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
     fontWeight: '600',
   },
   title: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '700',
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  heroSub: {
+    marginTop: 6,
+    color: '#f5b8e8',
+    fontSize: 13,
+    lineHeight: 18,
   },
   content: {
-    padding: 24,
+    padding: 18,
+    paddingBottom: 34,
   },
   heroCard: {
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#c7d7ef',
+    borderColor: '#EBD6ED',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 18,
+    marginBottom: 14,
+    shadowColor: '#55075c',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   heroTag: {
-    color: '#f59e0b',
+    color: '#55075c',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 6,
   },
   heroTitle: {
-    color: '#0f172a',
-    fontSize: 22,
+    color: '#1a1a2e',
+    fontSize: 19,
     fontWeight: '800',
     marginBottom: 4,
   },
   heroText: {
-    color: '#475569',
+    color: '#64748b',
     fontSize: 13,
     lineHeight: 18,
   },
@@ -140,13 +179,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   summaryText: {
-    color: '#0f172a',
+    color: '#1a1a2e',
     fontSize: 12,
     fontWeight: '700',
   },
   summaryPing: {
     color: '#ffffff',
-    backgroundColor: '#ef4444',
+    backgroundColor: '#55075c',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -157,15 +196,40 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#94a3b8',
     fontSize: 13,
+    marginBottom: 0,
+  },
+  emptyCard: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#EBD6ED',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  skeletonCard: {
+    height: 92,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 18,
     marginBottom: 12,
   },
   card: {
     backgroundColor: '#ffffff',
-    borderColor: '#d8e2ef',
+    borderColor: '#EBD6ED',
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#55075c',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   row: {
     flexDirection: 'row',
@@ -196,8 +260,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   unreadTag: {
-    color: '#0f172a',
-    backgroundColor: '#f59e0b',
+    color: '#fff',
+    backgroundColor: '#55075c',
     fontSize: 10,
     fontWeight: '700',
     borderRadius: 999,
@@ -206,7 +270,7 @@ const styles = StyleSheet.create({
   },
   readTag: {
     color: '#334155',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#f3e8ff',
     fontSize: 10,
     fontWeight: '700',
     borderRadius: 999,

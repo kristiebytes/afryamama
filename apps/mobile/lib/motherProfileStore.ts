@@ -1,7 +1,10 @@
 import {
+  addDoc,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   query,
@@ -9,6 +12,7 @@ import {
   where,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { firebaseDb } from './firebaseClient';
 
 export type MotherStage = 'PRENATAL' | 'POSTNATAL';
@@ -36,8 +40,18 @@ export interface MotherProfile {
   facility: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
+  assignedDoctorId?: string;
+  assignedDoctorName?: string;
+  assignedDoctorFacility?: string;
   children: ChildProfile[];
   createdAt: string;
+}
+
+export interface DoctorAssignment {
+  doctorId: string;
+  doctorName: string;
+  facility: string;
+  collectionName?: string;
 }
 
 const MEMORY_STORE = new Map<string, MotherProfile>();
@@ -90,8 +104,242 @@ function formatMotherCode(sequence: number): string {
 }
 
 function formatChildCode(motherCode: string, order: number): string {
-  const motherNumber = normalizeCode(motherCode).replace(/^M/, '');
-  return order <= 1 ? `CH${motherNumber}` : `CH${motherNumber}-${order}`;
+  const normalizedMotherCode = normalizeCode(motherCode);
+  return `${normalizedMotherCode}-B${order}`;
+}
+
+function normalizeFacilityName(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function normalizeFacilityKey(value: string): string {
+  return normalizeFacilityName(value).replace(/[^A-Z0-9]/g, '');
+}
+
+function readDoctorName(data: Record<string, unknown>): string {
+  const directName = readText(
+    data.fullName || data.name || data.displayName || data.doctorName || data.doctor_name,
+    ''
+  );
+
+  if (directName) return directName;
+
+  const firstName = readText(data.firstName || data.first_name, '');
+  const lastName = readText(data.lastName || data.last_name, '');
+  const combined = `${firstName} ${lastName}`.trim();
+  return combined;
+}
+
+function readDoctorFacility(data: Record<string, unknown>): string {
+  return readText(data.facility || data.hospital || data.clinic || data.preferredFacility, 'Facility');
+}
+
+function readDoctorFacilityCandidates(data: Record<string, unknown>): string[] {
+  const candidates: string[] = [];
+
+  const pushIfText = (value: unknown) => {
+    const text = readText(value, '');
+    if (text) candidates.push(text);
+  };
+
+  pushIfText(data.facility);
+  pushIfText(data.preferredFacility);
+  pushIfText(data.hospital);
+  pushIfText(data.clinic);
+  pushIfText(data.facilityName);
+  pushIfText(data.facility_name);
+  pushIfText(data.hospitalName);
+  pushIfText(data.hospital_name);
+  pushIfText(data.workstation);
+  pushIfText(data.station);
+
+  if (Array.isArray(data.facilities)) {
+    data.facilities.forEach((entry) => pushIfText(entry));
+  }
+
+  if (Array.isArray(data.clinics)) {
+    data.clinics.forEach((entry) => pushIfText(entry));
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+function isDoctorAvailable(data: Record<string, unknown>): boolean {
+  const inactive = String(data.status || '').toUpperCase() === 'INACTIVE';
+  const activeFalse = data.active === false;
+
+  // Doctors can handle multiple mothers. Only block inactive/disabled profiles.
+  return !(inactive || activeFalse);
+}
+
+async function getDoctorById(doctorId: string): Promise<DoctorAssignment | null> {
+  const trimmedId = doctorId.trim();
+  if (!trimmedId) return null;
+
+  const collectionsToCheck = ['doctors', 'Doctors'];
+  for (const collectionName of collectionsToCheck) {
+    try {
+      const doctorSnap = await getDoc(doc(firebaseDb, collectionName, trimmedId));
+      if (!doctorSnap.exists()) continue;
+
+      const data = doctorSnap.data() as Record<string, unknown>;
+      const doctorName = readDoctorName(data);
+      if (!doctorName) continue;
+
+      return {
+        doctorId: doctorSnap.id,
+        doctorName,
+        facility: readDoctorFacility(data),
+        collectionName,
+      };
+    } catch {
+      // Continue checking other doctor collection variants.
+    }
+  }
+
+  return null;
+}
+
+export async function assignDoctorForFacility(
+  facility: string,
+  currentDoctorId?: string
+): Promise<DoctorAssignment | null> {
+  const normalizedFacility = normalizeFacilityName(facility);
+  const normalizedFacilityKey = normalizeFacilityKey(facility);
+  if (!normalizedFacility) return null;
+
+  if (currentDoctorId?.trim()) {
+    const currentDoctor = await getDoctorById(currentDoctorId);
+    if (currentDoctor) {
+      const doctorFacilityName = normalizeFacilityName(currentDoctor.facility || '');
+      const doctorFacilityKey = normalizeFacilityKey(currentDoctor.facility || '');
+      const sameFacility =
+        doctorFacilityName === normalizedFacility ||
+        doctorFacilityName.includes(normalizedFacility) ||
+        normalizedFacility.includes(doctorFacilityName) ||
+        doctorFacilityKey === normalizedFacilityKey;
+
+      if (sameFacility) return currentDoctor;
+    }
+  }
+
+  const collectionsToCheck = ['doctors', 'Doctors'];
+  const candidates: DoctorAssignment[] = [];
+
+  for (const collectionName of collectionsToCheck) {
+    try {
+      const exactQueries = [
+        query(collection(firebaseDb, collectionName), where('facility', '==', facility.trim())),
+        query(collection(firebaseDb, collectionName), where('preferredFacility', '==', facility.trim())),
+        query(collection(firebaseDb, collectionName), where('hospital', '==', facility.trim())),
+        query(collection(firebaseDb, collectionName), where('clinic', '==', facility.trim())),
+      ];
+
+      for (const condition of exactQueries) {
+        try {
+          const exactSnap = await getDocs(condition);
+          exactSnap.docs.forEach((item) => {
+            const data = item.data() as Record<string, unknown>;
+            if (!isDoctorAvailable(data)) return;
+            const doctorName = readDoctorName(data);
+            if (!doctorName) return;
+
+            candidates.push({
+              doctorId: item.id,
+              doctorName,
+              facility: readDoctorFacility(data),
+              collectionName,
+            });
+          });
+        } catch {
+          // Continue to broader scan.
+        }
+      }
+
+      if (candidates.length > 0) {
+        return candidates.sort((a, b) => a.doctorName.localeCompare(b.doctorName))[0];
+      }
+
+      const snapshot = await getDocs(collection(firebaseDb, collectionName));
+      if (snapshot.empty) continue;
+
+      snapshot.docs.forEach((item) => {
+        const data = item.data() as Record<string, unknown>;
+        if (!isDoctorAvailable(data)) return;
+
+        const facilities = readDoctorFacilityCandidates(data);
+        const hasMatch = facilities.some((doctorFacility) => {
+          const doctorName = normalizeFacilityName(doctorFacility);
+          const doctorKey = normalizeFacilityKey(doctorFacility);
+          if (!doctorName || !doctorKey) return false;
+
+          return (
+            doctorName === normalizedFacility ||
+            doctorName.includes(normalizedFacility) ||
+            normalizedFacility.includes(doctorName) ||
+            doctorKey === normalizedFacilityKey
+          );
+        });
+
+        if (!hasMatch) return;
+
+        const doctorName = readDoctorName(data);
+        if (!doctorName) return;
+
+        candidates.push({
+          doctorId: item.id,
+          doctorName,
+          facility: facilities[0] || readDoctorFacility(data),
+          collectionName,
+        });
+      });
+
+      if (candidates.length > 0) {
+        return candidates.sort((a, b) => a.doctorName.localeCompare(b.doctorName))[0];
+      }
+    } catch {
+      // Continue checking fallback sources.
+    }
+  }
+
+  return null;
+}
+
+export async function reserveDoctorForMother(
+  assignment: DoctorAssignment,
+  payload: { motherId?: string; motherEmail?: string; motherCode?: string }
+): Promise<void> {
+  const collectionName = assignment.collectionName || 'doctors';
+  const updatePayload: Record<string, unknown> = {
+    assignedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const motherId = readText(payload.motherId, '');
+  const motherEmail = readText(payload.motherEmail, '').toLowerCase();
+  const motherCode = readText(payload.motherCode, '');
+
+  if (motherId) {
+    updatePayload.assignedMotherIds = arrayUnion(motherId);
+    // Keep single-value fields for backward compatibility with older readers.
+    updatePayload.assignedMotherId = motherId;
+  }
+
+  if (motherEmail) {
+    updatePayload.assignedMotherEmails = arrayUnion(motherEmail);
+    updatePayload.assignedMotherEmail = motherEmail;
+  }
+
+  if (motherCode) {
+    updatePayload.assignedMotherCodes = arrayUnion(motherCode);
+    updatePayload.assignedMotherCode = motherCode;
+  }
+
+  await setDoc(
+    doc(firebaseDb, collectionName, assignment.doctorId),
+    updatePayload,
+    { merge: true }
+  );
 }
 
 async function getNextMotherSequence(): Promise<number> {
@@ -140,6 +388,34 @@ async function findMotherDocByEmail(email: string): Promise<QueryDocumentSnapsho
   return null;
 }
 
+async function findMotherDocsForUpsert(email: string, motherCode: string): Promise<QueryDocumentSnapshot[]> {
+  const matches = new Map<string, QueryDocumentSnapshot>();
+  const emailFields = ['email', 'Email', 'userEmail', 'user_email', 'motherEmail', 'mother_email'];
+  const codeFields = ['motherCode', 'mother_code', 'code'];
+
+  for (const field of emailFields) {
+    try {
+      const snapshot = await getDocs(query(collection(firebaseDb, 'mothers'), where(field, '==', email), limit(20)));
+      snapshot.docs.forEach((item) => matches.set(item.id, item));
+    } catch {
+      // Continue checking alternative field names.
+    }
+  }
+
+  if (motherCode) {
+    for (const field of codeFields) {
+      try {
+        const snapshot = await getDocs(query(collection(firebaseDb, 'mothers'), where(field, '==', motherCode), limit(20)));
+        snapshot.docs.forEach((item) => matches.set(item.id, item));
+      } catch {
+        // Continue checking alternative field names.
+      }
+    }
+  }
+
+  return Array.from(matches.values());
+}
+
 export async function getMotherProfileByEmail(email: string): Promise<MotherProfile | null> {
   const key = normalizeEmail(email);
 
@@ -164,6 +440,9 @@ export async function getMotherProfileByEmail(email: string): Promise<MotherProf
       facility: readText(data.facility || data.preferredFacility, ''),
       emergencyContactName: readText(data.emergencyContactName || data.emergency_name, ''),
       emergencyContactPhone: readText(data.emergencyContactPhone || data.emergency_phone, ''),
+      assignedDoctorId: readText(data.assignedDoctorId || data.doctorId, ''),
+      assignedDoctorName: readText(data.assignedDoctorName || data.doctorName || data.assignedDoctor, ''),
+      assignedDoctorFacility: readText(data.assignedDoctorFacility || data.doctorFacility, ''),
       children: readChildren(data.children || data.childProfiles),
       createdAt: readText(data.createdAt, ''),
     };
@@ -200,6 +479,9 @@ export async function getMotherProfileByCode(motherCode: string): Promise<Mother
             facility: readText(data.facility || data.preferredFacility, ''),
             emergencyContactName: readText(data.emergencyContactName || data.emergency_name, ''),
             emergencyContactPhone: readText(data.emergencyContactPhone || data.emergency_phone, ''),
+            assignedDoctorId: readText(data.assignedDoctorId || data.doctorId, ''),
+            assignedDoctorName: readText(data.assignedDoctorName || data.doctorName || data.assignedDoctor, ''),
+            assignedDoctorFacility: readText(data.assignedDoctorFacility || data.doctorFacility, ''),
             children: readChildren(data.children || data.childProfiles),
             createdAt: readText(data.createdAt, ''),
           };
@@ -216,11 +498,28 @@ export async function getMotherProfileByCode(motherCode: string): Promise<Mother
 export async function saveMotherProfile(profile: MotherProfile): Promise<MotherProfile> {
   const key = normalizeEmail(profile.email);
   const motherCode = normalizeCode(profile.motherCode) || (await generateMotherCode());
+  const existingProfile = await getMotherProfileByEmail(key);
+  const persistedDoctorId = readText(existingProfile?.assignedDoctorId, '');
+  const persistedDoctorName = readText(existingProfile?.assignedDoctorName, '');
+  const persistedDoctorFacility = readText(existingProfile?.assignedDoctorFacility, '');
+  const incomingDoctorId = readText(profile.assignedDoctorId, '');
+
+  let assignedDoctor =
+    persistedDoctorId || incomingDoctorId
+      ? await getDoctorById(persistedDoctorId || incomingDoctorId)
+      : null;
+
+  if (!assignedDoctor) {
+    assignedDoctor = await assignDoctorForFacility(profile.facility || '', profile.assignedDoctorId || '');
+  }
+
+  const authUid = getAuth().currentUser?.uid || '';
   const normalizedChildren = (profile.children || [])
     .map((child, index) => {
       const order = Number.isFinite(Number(child.order)) ? Number(child.order) : index + 1;
+      const computedCode = formatChildCode(motherCode, order);
       return {
-        childCode: normalizeCode(child.childCode) || formatChildCode(motherCode, order),
+        childCode: normalizeCode(child.childCode) || computedCode,
         fullName: child.fullName.trim(),
         sex: child.sex.trim(),
         birthDate: child.birthDate.trim(),
@@ -235,13 +534,32 @@ export async function saveMotherProfile(profile: MotherProfile): Promise<MotherP
     ...profile,
     email: key,
     motherCode,
+    assignedDoctorId: assignedDoctor?.doctorId || persistedDoctorId || incomingDoctorId || '',
+    assignedDoctorName: assignedDoctor?.doctorName || persistedDoctorName || readText(profile.assignedDoctorName, ''),
+    assignedDoctorFacility: assignedDoctor?.facility || persistedDoctorFacility || readText(profile.assignedDoctorFacility, ''),
     children: normalizedChildren,
+    createdAt: profile.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
   try {
     const docId = key.replace(/[^a-z0-9]/gi, '_');
-    await setDoc(doc(firebaseDb, 'mothers', docId), payload, { merge: true });
+    const matchedDocs = await findMotherDocsForUpsert(key, motherCode);
+    const matchedIds = matchedDocs.map((item) => item.id);
+
+    const canonicalMotherDocId =
+      (authUid && matchedIds.includes(authUid) ? authUid : '') ||
+      (matchedIds.includes(docId) ? docId : '') ||
+      matchedIds[0] ||
+      authUid ||
+      docId;
+
+    await setDoc(doc(firebaseDb, 'mothers', canonicalMotherDocId), payload, { merge: true });
+
+    const duplicateIds = matchedIds.filter((id) => id !== canonicalMotherDocId);
+    if (duplicateIds.length > 0) {
+      await Promise.all(duplicateIds.map((id) => deleteDoc(doc(firebaseDb, 'mothers', id))));
+    }
 
     await Promise.all(
       normalizedChildren.map((child) => {
@@ -253,12 +571,38 @@ export async function saveMotherProfile(profile: MotherProfile): Promise<MotherP
             motherCode,
             motherEmail: key,
             motherName: profile.fullName,
+            familyLinkId: `${motherCode}-${child.childCode}`,
+            assignedDoctorId: assignedDoctor?.doctorId || '',
+            assignedDoctorName: assignedDoctor?.doctorName || '',
             updatedAt: new Date().toISOString(),
           },
           { merge: true }
         );
       })
     );
+
+    if (assignedDoctor) {
+      await reserveDoctorForMother(assignedDoctor, {
+        motherId: canonicalMotherDocId,
+        motherEmail: key,
+        motherCode,
+      });
+    }
+
+    const previousDoctorId = persistedDoctorId;
+    const nextDoctorId = readText(payload.assignedDoctorId, '');
+    if (previousDoctorId && nextDoctorId && previousDoctorId !== nextDoctorId) {
+      await addDoc(collection(firebaseDb, 'notifications'), {
+        title: 'Doctor assignment updated',
+        message: `Your primary doctor is now ${readText(payload.assignedDoctorName, 'your new doctor')}.`,
+        audience: 'MOTHER',
+        email: key,
+        motherEmail: key,
+        type: 'DOCTOR_CHANGE',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
   } catch (error) {
     throw new Error(
       error instanceof Error

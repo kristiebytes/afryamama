@@ -12,8 +12,6 @@ import ImmunizationScreen from './screens/ImmunizationScreen';
 import WellnessTipsScreen from './screens/WellnessTipsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import MotherProfileSetupScreen from './screens/MotherProfileSetupScreen';
-import ScheduleScreen from './screens/ScheduleScreen';
-import TimelineScreen from './screens/TimelineScreen';
 import MilestonesScreen from './screens/MilestonesScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import GrowthMonitoringScreen from './screens/GrowthMonitoringScreen';
@@ -22,7 +20,6 @@ import {
   loadMotherProfile,
   loginWithFirebase,
   logoutFromFirebase,
-  sendMotherPasswordReset,
   signUpMotherWithFirebase,
 } from './lib/firebaseAuth';
 import { saveMotherProfile } from './lib/motherProfileStore';
@@ -36,8 +33,6 @@ type Screen =
   | 'WELLNESS'
   | 'PROFILE_SETUP'
   | 'PROFILE'
-  | 'SCHEDULE'
-  | 'TIMELINE'
   | 'MILESTONES'
   | 'NOTIFICATIONS'
   | 'GROWTH';
@@ -93,10 +88,6 @@ export default function App() {
     }
   };
 
-  const handleForgotPassword = async (email: string) => {
-    await sendMotherPasswordReset(email);
-  };
-
   const handleLogout = async () => {
     await logoutFromFirebase();
     setUserName('');
@@ -118,7 +109,6 @@ export default function App() {
           <LoginScreen
             onLoginSuccess={handleLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
-            onForgotPassword={handleForgotPassword}
           />
         );
       case 'DASHBOARD':
@@ -142,10 +132,6 @@ export default function App() {
         );
       case 'PROFILE':
         return <ProfileScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
-      case 'SCHEDULE':
-        return <ScheduleScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
-      case 'TIMELINE':
-        return <TimelineScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'MILESTONES':
         return <MilestonesScreen email={userEmail} onBack={() => setCurrentScreen('DASHBOARD')} />;
       case 'APPOINTMENTS':
@@ -165,7 +151,6 @@ export default function App() {
           <LoginScreen
             onLoginSuccess={handleLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
-            onForgotPassword={handleForgotPassword}
           />
         );
     }

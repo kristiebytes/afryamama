@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, firebaseDb } from '@/lib/firebaseClient';
+import { useAuth } from '@/components/AuthProvider';
+import { addDoc, collection, getDocs, firebaseDb } from '@/lib/firebaseClient';
 
 interface MaternalRow {
   id: string;
@@ -25,6 +26,18 @@ interface ChildRow {
   height: string;
   recentVaccine: string;
   vaccineStatus: string;
+}
+
+interface MotherOption {
+  id: string;
+  name: string;
+}
+
+interface ChildOption {
+  id: string;
+  name: string;
+  motherId: string;
+  motherName: string;
 }
 
 function asLabel(value: unknown, fallback = '-'): string {
@@ -74,10 +87,25 @@ function inferCareTypeWithStatus(data: Record<string, unknown>, motherStatus: st
 }
 
 export default function RecordsPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'maternal' | 'child'>('maternal');
   const [loading, setLoading] = useState(true);
   const [maternalRows, setMaternalRows] = useState<MaternalRow[]>([]);
   const [childRows, setChildRows] = useState<ChildRow[]>([]);
+  const [motherOptions, setMotherOptions] = useState<MotherOption[]>([]);
+  const [childOptions, setChildOptions] = useState<ChildOption[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [recordMessage, setRecordMessage] = useState('');
+  const [visitType, setVisitType] = useState<'ANC' | 'PNC' | 'CHILD'>('ANC');
+  const [selectedMotherId, setSelectedMotherId] = useState('');
+  const [selectedChildId, setSelectedChildId] = useState('');
+  const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
+  const [weight, setWeight] = useState('');
+  const [height, setHeight] = useState('');
+  const [bp, setBp] = useState('');
+  const [fhr, setFhr] = useState('');
+  const [notes, setNotes] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
   const ancRows = maternalRows.filter((row) => row.careType === 'ANC');
   const pncRows = maternalRows.filter((row) => row.careType === 'PNC');
 
@@ -85,19 +113,31 @@ export default function RecordsPage() {
     let isMounted = true;
 
     async function loadRecords() {
+      if (!user?.email) {
+        if (isMounted) {
+          setMaternalRows([]);
+          setChildRows([]);
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         const [mothersSnapshot, pregnanciesSnapshot, maternalSnapshot, appointmentsSnapshot, childrenSnapshot, childSnapshot, growthSnapshot, growthAltSnapshot, immunizationSnapshot] =
           await Promise.all([
             getDocs(collection(firebaseDb, 'mothers')),
             getDocs(collection(firebaseDb, 'pregnancies')),
             getDocs(collection(firebaseDb, 'maternalRecords')),
-            getDocs(collection(firebaseDb, 'appointments')),
+            getDocs(collection(firebaseDb, 'pncRecords')),
             getDocs(collection(firebaseDb, 'children')),
             getDocs(collection(firebaseDb, 'child')),
             getDocs(collection(firebaseDb, 'growthRecords')),
             getDocs(collection(firebaseDb, 'growth_records')),
             getDocs(collection(firebaseDb, 'immunizations')),
           ]);
+
+        const doctorEmail = user.email.trim().toLowerCase();
+        const doctorUid = user.uid;
 
         const mothersById = new Map<string, string>();
         const motherStatusById = new Map<string, string>();
@@ -168,7 +208,7 @@ export default function RecordsPage() {
               careType: 'ANC',
               patient: mothersById.get(motherId) || asLabel(data.motherName ?? data.patientName, 'Unknown Mother'),
               pregnancyTerm: gestation === '-' ? pregnancyStatus : `${gestation} Weeks (${pregnancyStatus})`,
-              checkupDate: asDateLabel(data.dateTime ?? data.date ?? data.appointmentTime ?? data.createdAt),
+              checkupDate: asDateLabel(data.checkupDate ?? data.visitDate ?? data.date ?? data.recordedDate),
               weight: asLabel(data.weight, '-'),
               bp: asLabel(data.bloodPressure ?? data.bp, '-'),
               fhr: (() => {
@@ -177,16 +217,10 @@ export default function RecordsPage() {
                 const txt = asLabel(raw, '-');
                 return txt === '-' ? txt : txt.includes('bpm') ? txt : `${txt} bpm`;
               })(),
-              notes: asLabel(data.clinicalObservations ?? data.notes ?? data.reason ?? data.plan, 'No clinical notes.'),
+              notes: asLabel(data.clinicalObservations ?? data.notes ?? data.plan, 'No clinical notes.'),
             };
-          });
-
-        const maternalById = new Map<string, MaternalRow>();
-        [...maternal, ...maternalFromAppointments].forEach((row) => {
-          if (!maternalById.has(row.id)) maternalById.set(row.id, row);
-        });
-
-        const combinedMaternal = Array.from(maternalById.values()).sort((a, b) => b.checkupDate.localeCompare(a.checkupDate));
+          })
+          .sort((a, b) => b.checkupDate.localeCompare(a.checkupDate));
 
         const growthByChildId = new Map<string, Record<string, unknown>>();
         [...growthSnapshot.docs, ...growthAltSnapshot.docs].forEach((docItem) => {
@@ -230,11 +264,32 @@ export default function RecordsPage() {
             recentVaccine: asLabel(immunization?.vaccine ?? immunization?.vaccineName, '-'),
             vaccineStatus: asLabel(immunization?.status, 'Due'),
           };
+        }).filter((row) => row.weight !== '-' || row.height !== '-' || row.recentVaccine !== '-');
+
+        const mappedChildren: ChildOption[] = childrenSnapshot.docs.map((docItem) => {
+          const data = docItem.data() as Record<string, unknown>;
+          const motherId = asLabel(data.motherId ?? data.mother_id, '');
+          const motherName = mothersById.get(motherId) || asLabel(data.motherName, 'Unknown Mother');
+
+          return {
+            id: docItem.id,
+            name: asLabel(data.name ?? data.childName, 'Unknown Child'),
+            motherId,
+            motherName,
+          };
         });
 
         if (isMounted) {
           setMaternalRows(combinedMaternal);
           setChildRows(child);
+          setMotherOptions(mappedMothers.sort((a, b) => a.name.localeCompare(b.name)));
+          setChildOptions(mappedChildren.sort((a, b) => a.name.localeCompare(b.name)));
+          if (!selectedMotherId && mappedMothers.length > 0) {
+            setSelectedMotherId(mappedMothers[0].id);
+          }
+          if (!selectedChildId && mappedChildren.length > 0) {
+            setSelectedChildId(mappedChildren[0].id);
+          }
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -246,7 +301,97 @@ export default function RecordsPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [reloadToken, selectedChildId, selectedMotherId, user?.email, user?.uid]);
+
+  async function handleRecordVisit() {
+    setRecordMessage('');
+
+    const selectedMother = motherOptions.find((item) => item.id === selectedMotherId) || null;
+    const selectedChild = childOptions.find((item) => item.id === selectedChildId) || null;
+
+    if ((visitType === 'ANC' || visitType === 'PNC') && !selectedMother) {
+      setRecordMessage('Select a mother first.');
+      return;
+    }
+
+    if (visitType === 'CHILD' && !selectedChild) {
+      setRecordMessage('Select a child first.');
+      return;
+    }
+
+    setRecording(true);
+    try {
+      const dateIso = new Date(`${visitDate}T09:00:00`).toISOString();
+
+      if (visitType === 'ANC') {
+        await addDoc(collection(firebaseDb, 'maternalRecords'), {
+          motherId: selectedMother?.id || '',
+          motherName: selectedMother?.name || '',
+          type: visitType,
+          visitType,
+          checkupDate: dateIso,
+          date: dateIso,
+          weight: weight.trim(),
+          bloodPressure: bp.trim(),
+          bp: bp.trim(),
+          fetalHeartRate: visitType === 'ANC' ? fhr.trim() : '',
+          fhr: visitType === 'ANC' ? fhr.trim() : '',
+          clinicalObservations: notes.trim(),
+          notes: notes.trim(),
+          doctorUid: user?.uid || '',
+          doctorEmail: user?.email || '',
+          createdAt: new Date().toISOString(),
+        });
+      } else if (visitType === 'PNC') {
+        await addDoc(collection(firebaseDb, 'pncRecords'), {
+          motherId: selectedMother?.id || '',
+          motherName: selectedMother?.name || '',
+          type: 'PNC',
+          visitType: 'PNC',
+          recordType: 'PNC',
+          stage: 'POSTNATAL',
+          checkupDate: dateIso,
+          date: dateIso,
+          weight: weight.trim(),
+          bloodPressure: bp.trim(),
+          bp: bp.trim(),
+          clinicalObservations: notes.trim(),
+          notes: notes.trim(),
+          doctorUid: user?.uid || '',
+          doctorEmail: user?.email || '',
+          createdAt: new Date().toISOString(),
+        });
+      } else {
+        await addDoc(collection(firebaseDb, 'child_growth'), {
+          childId: selectedChild?.id || '',
+          childName: selectedChild?.name || '',
+          motherId: selectedChild?.motherId || '',
+          motherName: selectedChild?.motherName || '',
+          visitType: 'CHILD',
+          checkupDate: dateIso,
+          date: dateIso,
+          weight: weight.trim(),
+          height: height.trim(),
+          notes: notes.trim(),
+          doctorUid: user?.uid || '',
+          doctorEmail: user?.email || '',
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      setRecordMessage('Visit recorded successfully.');
+      setWeight('');
+      setHeight('');
+      setBp('');
+      setFhr('');
+      setNotes('');
+      setReloadToken((current) => current + 1);
+    } catch {
+      setRecordMessage('Could not record visit.');
+    } finally {
+      setRecording(false);
+    }
+  }
 
   return (
     <main className="main-content">
@@ -255,8 +400,83 @@ export default function RecordsPage() {
             <h1 className="page-title">Medical Records</h1>
             <p className="page-subtitle">Track pregnancy progressions, child development indices, and vaccine status.</p>
           </div>
-          <div>
-            <button className="btn btn-primary">+ Add New Record</button>
+        </div>
+
+        <div className="content-card" style={{ marginBottom: '24px' }}>
+          <div className="card-header">
+            <span>Record New Visit</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 12 }}>
+            <label>
+              <div className="text-muted">Visit Type</div>
+              <select className="table-filter-input" value={visitType} onChange={(event) => setVisitType(event.target.value as 'ANC' | 'PNC' | 'CHILD')}>
+                <option value="ANC">ANC Visit</option>
+                <option value="PNC">PNC Visit</option>
+                <option value="CHILD">Child Visit</option>
+              </select>
+            </label>
+
+            {(visitType === 'ANC' || visitType === 'PNC') ? (
+              <label>
+                <div className="text-muted">Mother</div>
+                <select className="table-filter-input" value={selectedMotherId} onChange={(event) => setSelectedMotherId(event.target.value)}>
+                  {motherOptions.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label>
+                <div className="text-muted">Child</div>
+                <select className="table-filter-input" value={selectedChildId} onChange={(event) => setSelectedChildId(event.target.value)}>
+                  {childOptions.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name} ({item.motherName})</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <label>
+              <div className="text-muted">Visit Date</div>
+              <input className="table-filter-input" type="date" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} />
+            </label>
+
+            <label>
+              <div className="text-muted">Weight (kg)</div>
+              <input className="table-filter-input" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="e.g. 68" />
+            </label>
+
+            {visitType === 'CHILD' ? (
+              <label>
+                <div className="text-muted">Height (cm)</div>
+                <input className="table-filter-input" value={height} onChange={(event) => setHeight(event.target.value)} placeholder="e.g. 67" />
+              </label>
+            ) : (
+              <label>
+                <div className="text-muted">Blood Pressure</div>
+                <input className="table-filter-input" value={bp} onChange={(event) => setBp(event.target.value)} placeholder="e.g. 120/80" />
+              </label>
+            )}
+
+            {visitType === 'ANC' ? (
+              <label>
+                <div className="text-muted">Fetal Heart Rate</div>
+                <input className="table-filter-input" value={fhr} onChange={(event) => setFhr(event.target.value)} placeholder="e.g. 142 bpm" />
+              </label>
+            ) : null}
+
+            <label style={{ gridColumn: '1 / -1' }}>
+              <div className="text-muted">Clinical Notes</div>
+              <input className="table-filter-input" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Visit observations" />
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" onClick={handleRecordVisit} disabled={recording}>
+              {recording ? 'Saving...' : 'Save Visit Record'}
+            </button>
+            {recordMessage ? <span className="text-muted">{recordMessage}</span> : null}
           </div>
         </div>
 
