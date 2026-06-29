@@ -1,6 +1,7 @@
 import {
 	createUserWithEmailAndPassword,
 	sendPasswordResetEmail,
+	signInWithCustomToken,
 	signInWithEmailAndPassword,
 	signOut,
 	updateProfile,
@@ -17,6 +18,12 @@ import {
 	where,
 } from 'firebase/firestore';
 import { firebaseAuth, firebaseDb } from './firebaseClient';
+
+function getApiBaseUrl(): string {
+	const configured = (process.env.EXPO_PUBLIC_API_BASE_URL || '').trim();
+	if (configured) return configured.replace(/\/$/, '');
+	return 'http://localhost:5055';
+}
 
 export interface MotherProfile {
 	displayName: string;
@@ -160,6 +167,39 @@ export async function loginWithFirebase(email: string, password: string) {
 	return credential;
 }
 
+export async function loginWithFirebasePin(email: string, pin: string) {
+	const normalizedEmail = email.trim().toLowerCase();
+	const normalizedPin = pin.trim();
+
+	if (!normalizedEmail) {
+		throw new Error('Email is required for PIN login.');
+	}
+
+	if (!/^\d{4}$/.test(normalizedPin)) {
+		throw new Error('PIN must be exactly 4 digits.');
+	}
+
+	const baseUrl = getApiBaseUrl();
+	const response = await fetch(`${baseUrl}/api/auth/mother-pin-login`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ email: normalizedEmail, pin: normalizedPin }),
+	});
+
+	const payload = (await response.json().catch(() => ({}))) as {
+		customToken?: string;
+		message?: string;
+	};
+
+	if (!response.ok || !payload.customToken) {
+		throw new Error(payload.message || 'PIN login failed.');
+	}
+
+	const credential = await signInWithCustomToken(firebaseAuth, payload.customToken);
+	await safeEnsureMotherProfileForUser(credential.user);
+	return credential;
+}
+
 export async function signUpMotherWithFirebase(fullName: string, email: string, password: string) {
 	const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
 	const displayName = fullName.trim();
@@ -167,6 +207,7 @@ export async function signUpMotherWithFirebase(fullName: string, email: string, 
 		await updateProfile(credential.user, { displayName });
 	}
 	await safeEnsureMotherProfileForUser(credential.user);
+
 	return credential;
 }
 

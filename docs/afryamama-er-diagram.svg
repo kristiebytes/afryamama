@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1400" viewBox="0 0 2200 1400">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 34px Arial, sans-serif; fill: #1f2937; }
+      .subtitle { font: 400 16px Arial, sans-serif; fill: #4b5563; }
+      .entity { fill: #ffffff; stroke: #7c3aed; stroke-width: 2; rx: 12; }
+      .head { fill: #f3e8ff; }
+      .name { font: 700 15px Arial, sans-serif; fill: #4c1d95; }
+      .attr { font: 400 13px Arial, sans-serif; fill: #111827; }
+      .line { stroke: #6b7280; stroke-width: 2; fill: none; }
+      .rel { font: 600 12px Arial, sans-serif; fill: #374151; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="2200" height="1400"/>
+  <text class="title" x="70" y="70">AfryaMama ER Diagram (Core Firestore Model)</text>
+  <text class="subtitle" x="70" y="100">Collections focused on mother, child, doctor, records, appointments, milestones, and notifications.</text>
+
+  <!-- Row 1 -->
+  <g transform="translate(70,150)">
+    <rect class="entity" width="350" height="190"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">MOTHER (mothers)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">motherCode, fullName, email, phone</text>
+    <text class="attr" x="16" y="109">stage, pregnancyWeek, babyAgeMonths</text>
+    <text class="attr" x="16" y="131">county, facility</text>
+    <text class="attr" x="16" y="153">assignedDoctorId (FK)</text>
+  </g>
+
+  <g transform="translate(500,150)">
+    <rect class="entity" width="350" height="170"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">DOCTOR (doctors / Doctors)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">fullName, email</text>
+    <text class="attr" x="16" y="109">facility, preferredFacility</text>
+    <text class="attr" x="16" y="131">assignedMotherIds, assignedMotherEmails</text>
+  </g>
+
+  <g transform="translate(930,150)">
+    <rect class="entity" width="350" height="185"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">CHILD (children / child)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">childCode, fullName, sex</text>
+    <text class="attr" x="16" y="109">birthDate / dob</text>
+    <text class="attr" x="16" y="131">motherId, motherEmail (FK-like)</text>
+    <text class="attr" x="16" y="153">motherName</text>
+  </g>
+
+  <g transform="translate(1360,150)">
+    <rect class="entity" width="350" height="180"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">PREGNANCY (pregnancies)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">motherId (FK-like)</text>
+    <text class="attr" x="16" y="109">status, gestationWeeks</text>
+    <text class="attr" x="16" y="131">EDD / expected dates</text>
+  </g>
+
+  <g transform="translate(1790,150)">
+    <rect class="entity" width="350" height="200"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">APPOINTMENT (appointments)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">motherId, childId, doctorId</text>
+    <text class="attr" x="16" y="109">type, consultationFor</text>
+    <text class="attr" x="16" y="131">date / dateTime, status</text>
+    <text class="attr" x="16" y="153">reason, sourceRecord</text>
+    <text class="attr" x="16" y="175">stage</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g transform="translate(220,470)">
+    <rect class="entity" width="350" height="200"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">MATERNAL_RECORD (maternalRecords)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">motherId, doctorId</text>
+    <text class="attr" x="16" y="109">visitType: ANC</text>
+    <text class="attr" x="16" y="131">checkupDate, weight, bp, fhr</text>
+    <text class="attr" x="16" y="153">clinicalObservations, notes</text>
+    <text class="attr" x="16" y="175">createdAt</text>
+  </g>
+
+  <g transform="translate(650,470)">
+    <rect class="entity" width="350" height="200"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">PNC_RECORD (pncRecords)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">motherId, doctorId</text>
+    <text class="attr" x="16" y="109">visitType: PNC / POSTNATAL</text>
+    <text class="attr" x="16" y="131">checkupDate, weight, bp, hr</text>
+    <text class="attr" x="16" y="153">clinicalObservations, notes</text>
+    <text class="attr" x="16" y="175">createdAt</text>
+  </g>
+
+  <g transform="translate(1080,470)">
+    <rect class="entity" width="350" height="200"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">CHILD_GROWTH (child_growth)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">childId, motherId, doctorId</text>
+    <text class="attr" x="16" y="109">checkupDate, weight, height</text>
+    <text class="attr" x="16" y="131">headCircumference</text>
+    <text class="attr" x="16" y="153">notes</text>
+    <text class="attr" x="16" y="175">createdAt</text>
+  </g>
+
+  <g transform="translate(1510,470)">
+    <rect class="entity" width="350" height="190"/>
+    <rect class="head" width="350" height="40"/>
+    <text class="name" x="16" y="26">IMMUNIZATION (immunizations)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">childId, motherId, doctorId</text>
+    <text class="attr" x="16" y="109">vaccine, dose, status</text>
+    <text class="attr" x="16" y="131">nextVaccineDate</text>
+    <text class="attr" x="16" y="153">scheduleKey, administeredDate</text>
+  </g>
+
+  <!-- Row 3 -->
+  <g transform="translate(500,790)">
+    <rect class="entity" width="400" height="200"/>
+    <rect class="head" width="400" height="40"/>
+    <text class="name" x="16" y="26">DEVELOPMENT_MILESTONE (development_milestones)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">motherId</text>
+    <text class="attr" x="16" y="109">stage, title, weekOrAge</text>
+    <text class="attr" x="16" y="131">status, notes</text>
+    <text class="attr" x="16" y="153">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(980,790)">
+    <rect class="entity" width="400" height="200"/>
+    <rect class="head" width="400" height="40"/>
+    <text class="name" x="16" y="26">NOTIFICATION (notifications / alerts)</text>
+    <text class="attr" x="16" y="65">PK: id</text>
+    <text class="attr" x="16" y="87">audience, stage, targetStage</text>
+    <text class="attr" x="16" y="109">email / motherEmail / userEmail</text>
+    <text class="attr" x="16" y="131">title, message, type</text>
+    <text class="attr" x="16" y="153">read, createdAt</text>
+  </g>
+
+  <!-- Relationships -->
+  <path class="line" d="M420 240 L500 240"/>
+  <text class="rel" x="445" y="232">assigned to</text>
+
+  <path class="line" d="M420 280 L930 280"/>
+  <text class="rel" x="640" y="272">has</text>
+
+  <path class="line" d="M420 320 L1360 320"/>
+  <text class="rel" x="860" y="312">tracks</text>
+
+  <path class="line" d="M420 340 L1790 340"/>
+  <text class="rel" x="1060" y="332">books</text>
+
+  <path class="line" d="M850 320 L1790 320"/>
+  <text class="rel" x="1320" y="312">manages</text>
+
+  <path class="line" d="M1200 350 L1960 350"/>
+  <text class="rel" x="1560" y="370">child follow-up</text>
+
+  <path class="line" d="M420 340 L395 470"/>
+  <text class="rel" x="250" y="420">ANC records</text>
+
+  <path class="line" d="M420 340 L825 470"/>
+  <text class="rel" x="560" y="430">PNC records</text>
+
+  <path class="line" d="M1200 335 L1255 470"/>
+  <text class="rel" x="1205" y="430">growth entries</text>
+
+  <path class="line" d="M1200 335 L1685 470"/>
+  <text class="rel" x="1455" y="430">vaccine entries</text>
+
+  <path class="line" d="M850 320 L395 470"/>
+  <path class="line" d="M850 320 L825 470"/>
+  <path class="line" d="M850 320 L1255 470"/>
+  <path class="line" d="M850 320 L1685 470"/>
+
+  <path class="line" d="M420 340 L700 790"/>
+  <text class="rel" x="470" y="650">milestone progress</text>
+
+  <path class="line" d="M420 340 L1180 790"/>
+  <text class="rel" x="760" y="660">receives alerts</text>
+
+  <!-- Crow's foot-ish markers (simple) -->
+  <path class="line" d="M500 240 l-12 -8 M500 240 l-12 0 M500 240 l-12 8"/>
+  <path class="line" d="M930 280 l-12 -8 M930 280 l-12 0 M930 280 l-12 8"/>
+  <path class="line" d="M1360 320 l-12 -8 M1360 320 l-12 0 M1360 320 l-12 8"/>
+  <path class="line" d="M1790 340 l-12 -8 M1790 340 l-12 0 M1790 340 l-12 8"/>
+
+</svg>

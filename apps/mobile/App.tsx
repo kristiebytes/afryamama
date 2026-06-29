@@ -19,6 +19,7 @@ import { firebaseAuth } from './lib/firebaseClient';
 import {
   loadMotherProfile,
   loginWithFirebase,
+  loginWithFirebasePin,
   logoutFromFirebase,
   signUpMotherWithFirebase,
 } from './lib/firebaseAuth';
@@ -78,6 +79,10 @@ export default function App() {
     await loginWithFirebase(email, password);
   };
 
+  const handlePinLoginSuccess = async (email: string, pin: string) => {
+    await loginWithFirebasePin(email, pin);
+  };
+
   const handleSignUpSuccess = async (fullName: string, email: string, password: string) => {
     redirectToProfileAfterSignUpRef.current = true;
     try {
@@ -108,6 +113,7 @@ export default function App() {
         return (
           <LoginScreen
             onLoginSuccess={handleLoginSuccess}
+            onPinLoginSuccess={handlePinLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
           />
         );
@@ -150,6 +156,7 @@ export default function App() {
         return (
           <LoginScreen
             onLoginSuccess={handleLoginSuccess}
+            onPinLoginSuccess={handlePinLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
           />
         );
