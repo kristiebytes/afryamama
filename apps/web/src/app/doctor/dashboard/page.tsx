@@ -43,6 +43,23 @@ const emptyMetrics: DashboardMetrics = {
   infantsMonitored: 0,
 };
 
+function normalize(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeLower(value: unknown): string {
+  return normalize(value).toLowerCase();
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function toTimeLabel(value: unknown): string {
   if (typeof value === 'string') {
     const date = new Date(value);
@@ -62,6 +79,46 @@ function getStatusBadgeClass(status: string): string {
   if (normalized === 'pending') return 'badge-warning';
   if (normalized === 'cancelled' || normalized === 'rejected') return 'badge-danger';
   return 'badge-success';
+}
+
+function inferAppointmentFor(data: Record<string, unknown>): 'MOTHER' | 'CHILD' {
+  const source = normalizeLower(data.consultationFor || data.consultation_for || data.recordType || data.record_type);
+  if (source.includes('child') || source.includes('baby') || source.includes('growth')) {
+    return 'CHILD';
+  }
+  return 'MOTHER';
+}
+
+function isTodayAppointment(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false;
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => Boolean(item));
+}
+
+function normalizeDoctorName(value: unknown): string {
+  return normalizeLower(value).replace(/\s+/g, ' ');
+}
+
+function motherNameFromData(data: Record<string, unknown>): string {
+  const firstName = normalize(data.firstName || data.first_name || data.motherFirstName || data.mother_first_name);
+  const lastName = normalize(data.lastName || data.last_name || data.motherLastName || data.mother_last_name);
+  const combined = `${firstName} ${lastName}`.trim();
+  return combined || normalize(data.fullName || data.full_name || data.name) || 'Mother';
 }
 
 export default function DoctorDashboard() {
@@ -89,7 +146,6 @@ export default function DoctorDashboard() {
     () => motherOptions.find((item) => item.id === selectedMotherId) || null,
     [motherOptions, selectedMotherId]
   );
-
 
   async function createSingleAppointment() {
     if (!user?.email || !selectedMother) {
@@ -119,6 +175,7 @@ export default function DoctorDashboard() {
         stage: appointmentStage,
         reason: appointmentReason || 'Routine clinic review',
         status: 'PENDING',
+        consultationFor: appointmentStage === 'POSTNATAL' ? 'CHILD' : 'MOTHER',
         dateTime: dateTimeIso,
         appointmentDate: dateTimeIso,
         appointmentTime: appointmentTime || '09:00',
@@ -134,7 +191,6 @@ export default function DoctorDashboard() {
     }
   }
 
-
   useEffect(() => {
     async function loadDashboardData() {
       if (!user?.email) {
@@ -148,25 +204,24 @@ export default function DoctorDashboard() {
           getDocs(query(collection(firebaseDb, 'Doctors'), where('email', '==', user.email), limit(1))),
         ]);
 
-        let resolvedDoctorDoc = !doctorsSnapshot.empty
-          ? doctorsSnapshot.docs[0]
+        let resolvedDoctorDoc: DocSnapshotLike | null = !doctorsSnapshot.empty
+          ? (doctorsSnapshot.docs[0] as unknown as DocSnapshotLike)
           : !doctorsCapsSnapshot.empty
-            ? doctorsCapsSnapshot.docs[0]
+            ? (doctorsCapsSnapshot.docs[0] as unknown as DocSnapshotLike)
             : null;
 
         if (!resolvedDoctorDoc) {
-          const normalizedUserEmail = user.email.trim().toLowerCase();
+          const normalizedUserEmail = normalizeLower(user.email);
           const [allDoctorsSnapshot, allDoctorsCapsSnapshot] = await Promise.all([
             getDocs(collection(firebaseDb, 'doctors')),
             getDocs(collection(firebaseDb, 'Doctors')),
           ]);
 
-          const allDoctorDocs = [...allDoctorsSnapshot.docs, ...allDoctorsCapsSnapshot.docs];
+          const allDoctorDocs = [...allDoctorsSnapshot.docs, ...allDoctorsCapsSnapshot.docs] as unknown as DocSnapshotLike[];
           resolvedDoctorDoc =
-            allDoctorDocs.find((docItem: DocSnapshotLike) => {
+            allDoctorDocs.find((docItem) => {
               const data = docItem.data() as Record<string, unknown>;
-              const candidateEmail =
-                (data.email || data.Email || data.userEmail || data.user_email || '').toString().trim().toLowerCase();
+              const candidateEmail = normalizeLower(data.email || data.Email || data.userEmail || data.user_email);
               return candidateEmail && candidateEmail === normalizedUserEmail;
             }) || null;
         }
@@ -175,28 +230,24 @@ export default function DoctorDashboard() {
 
         const resolvedDoctorName = (() => {
           if (!resolvedDoctorDoc) return (user.displayName || user.email || 'Doctor').toString();
-          const doctorData = resolvedDoctorData;
-          const firstName = (doctorData.firstName || doctorData.first_name || '').toString().trim();
-          const lastName = (doctorData.lastName || doctorData.last_name || '').toString().trim();
+          const firstName = normalize(resolvedDoctorData.firstName || resolvedDoctorData.first_name);
+          const lastName = normalize(resolvedDoctorData.lastName || resolvedDoctorData.last_name);
           const fullName = `${firstName} ${lastName}`.trim();
-          setDoctorName(fullName || user.email || 'Doctor');
-        } else {
-          setDoctorName(user.email || 'Doctor');
-        }
+          return fullName || normalize(resolvedDoctorData.fullName || resolvedDoctorData.name) || user.email || 'Doctor';
+        })();
 
         if (resolvedDoctorDoc) {
           setDoctorDocId(resolvedDoctorDoc.id);
         }
         setDoctorName(resolvedDoctorName);
 
-        const resolvedDoctorDocId = resolvedDoctorDoc?.id || '';
-        const resolvedDoctorNameKey = normalizeDoctorName(resolvedDoctorName);
         const assignedMotherEmails = [
           ...toStringArray(resolvedDoctorData.assignedMotherEmails),
           ...toStringArray(resolvedDoctorData.assigned_mother_emails),
           ...toStringArray(resolvedDoctorData.motherEmails),
           ...toStringArray(resolvedDoctorData.mother_emails),
         ].map((value) => value.toLowerCase());
+
         const assignedMotherIds = [
           ...toStringArray(resolvedDoctorData.assignedMotherIds),
           ...toStringArray(resolvedDoctorData.assigned_mother_ids),
@@ -204,47 +255,67 @@ export default function DoctorDashboard() {
           ...toStringArray(resolvedDoctorData.mother_ids),
         ];
 
-        const [mothersSnapshot, childrenSnapshot, allAppointmentsSnapshot] = await Promise.all([
+        const allAssignedMotherEmails = new Set(assignedMotherEmails);
+        const allAssignedMotherIds = new Set(assignedMotherIds);
+
+        const [mothersSnapshot, mothersCapsSnapshot, childrenSnapshot, allAppointmentsSnapshot] = await Promise.all([
           getDocs(collection(firebaseDb, 'mothers')),
+          getDocs(collection(firebaseDb, 'Mothers')),
           getDocs(collection(firebaseDb, 'children')),
           getDocs(collection(firebaseDb, 'appointments')),
         ]);
 
-        const motherPhoneById = new Map<string, string>();
-        const prenatalMotherIds = new Set<string>();
-        mothersSnapshot.docs.forEach((docItem: DocSnapshotLike) => {
-          const data = docItem.data() as Record<string, unknown>;
-          const phone = (data.phone || data.contact || data.phoneNumber || '').toString().trim();
-          if (phone) {
-            motherPhoneById.set(docItem.id, phone);
-          }
+        const allMotherDocs = [...mothersSnapshot.docs, ...mothersCapsSnapshot.docs] as unknown as DocSnapshotLike[];
+        const mappedMotherByKey = new Map<string, MotherOption>();
 
-          const status = (data.status || data.maternalStatus || data.stage || '').toString().trim().toUpperCase();
-          if (status.includes('PRENATAL') || status.includes('PREG')) {
-            prenatalMotherIds.add(docItem.id);
+        allMotherDocs.forEach((docItem) => {
+          const data = docItem.data() as Record<string, unknown>;
+          const email = normalizeLower(data.email || data.Email || data.userEmail || data.user_email);
+          const fullName = motherNameFromData(data);
+          const stageText = normalizeLower(data.stage || data.motherStage || data.status || data.maternalStatus);
+          const stage: 'PRENATAL' | 'POSTNATAL' = stageText.includes('post') ? 'POSTNATAL' : 'PRENATAL';
+
+          const option: MotherOption = {
+            id: docItem.id,
+            fullName,
+            email,
+            phone: normalize(data.phone || data.contact || data.phoneNumber),
+            stage,
+            pregnancyWeek: toNumberOrNull(data.pregnancyWeek || data.week || data.currentWeek),
+            babyAgeMonths: toNumberOrNull(data.babyAgeMonths || data.baby_months || data.infantAgeMonths),
+          };
+
+          const key = email || docItem.id;
+          if (!mappedMotherByKey.has(key)) {
+            mappedMotherByKey.set(key, option);
           }
         });
 
-        const pregnancyMotherIds = new Set<string>();
-        pregnanciesSnapshot.docs.forEach((docItem: DocSnapshotLike) => {
-          const data = docItem.data() as Record<string, unknown>;
-          const motherId = (data.motherId || data.mother_id || '').toString().trim();
-          const status = (data.status || '').toString().trim().toUpperCase();
-          if (!motherId) return;
-          if (!status || status === 'ACTIVE' || status === 'ONGOING' || status === 'PREGNANT') {
-            pregnancyMotherIds.add(motherId);
-          }
-        });
+        const allMappedMothers = Array.from(mappedMotherByKey.values()).sort((a, b) =>
+          a.fullName.localeCompare(b.fullName)
+        );
 
-        const activePregnancyCount = new Set<string>([
-          ...pregnancyMotherIds,
-          ...prenatalMotherIds,
-        ]).size;
+        const assignedOnly = allMappedMothers.filter((mother) =>
+          allAssignedMotherIds.has(mother.id) || (mother.email && allAssignedMotherEmails.has(mother.email))
+        );
 
-        const today = new Date();
-        const todayKey = today.toISOString().slice(0, 10);
+        // If assigned links are present and match mothers, show assigned list.
+        // Otherwise show all mothers so appointment creation never gets blocked.
+        const visibleMothers = assignedOnly.length > 0 ? assignedOnly : allMappedMothers;
 
-        const doctorAppointments = allAppointmentsSnapshot.docs.filter((docItem: DocSnapshotLike) => {
+        setMotherOptions(visibleMothers);
+        if (visibleMothers.length > 0) {
+          const first = visibleMothers[0];
+          setSelectedMotherId((current) => current || first.id);
+          setAppointmentStage(first.stage);
+        } else {
+          setSelectedMotherId('');
+        }
+
+        const resolvedDoctorDocId = resolvedDoctorDoc?.id || '';
+        const resolvedDoctorNameKey = normalizeDoctorName(resolvedDoctorName);
+
+        const doctorAppointments = (allAppointmentsSnapshot.docs as unknown as DocSnapshotLike[]).filter((docItem) => {
           const data = docItem.data() as Record<string, unknown>;
           const candidateEmails = [
             data.doctorEmail,
@@ -298,7 +369,7 @@ export default function DoctorDashboard() {
             .map((value) => value.trim());
 
           return (
-            candidateEmails.includes(user.email!.trim().toLowerCase()) ||
+            candidateEmails.includes(normalizeLower(user.email)) ||
             candidateDoctorIds.includes(user.uid) ||
             (resolvedDoctorDocId ? candidateDoctorIds.includes(resolvedDoctorDocId) : false) ||
             (resolvedDoctorNameKey ? candidateDoctorNames.includes(resolvedDoctorNameKey) : false) ||
@@ -307,32 +378,28 @@ export default function DoctorDashboard() {
           );
         });
 
-        const todaysDoctorAppointments = doctorAppointments.filter((docItem: DocSnapshotLike) => {
+        const todaysDoctorAppointments = doctorAppointments.filter((docItem) => {
           const data = docItem.data() as Record<string, unknown>;
-          return isTodayAppointment(data.dateTime || data.appointmentDate || data.date || data.scheduledAt || data.appointmentTime);
+          return isTodayAppointment(data.dateTime || data.appointmentDate || data.date || data.scheduledAt);
         });
 
-        const todaysAppointments = todaysDoctorAppointments.length;
-
-        const rows: AppointmentRow[] = todaysDoctorAppointments.slice(0, 8).map((docItem: DocSnapshotLike) => {
+        const rows: AppointmentRow[] = todaysDoctorAppointments.slice(0, 8).map((docItem) => {
           const data = docItem.data() as Record<string, unknown>;
-          const firstName = (data.motherFirstName || data.firstName || '').toString().trim();
-          const lastName = (data.motherLastName || data.lastName || '').toString().trim();
           const motherName =
-            `${firstName} ${lastName}`.trim() ||
-            (data.motherName || data.patientName || data.name || 'Mother').toString();
-          const motherId = (data.motherId || data.mother_id || '').toString().trim();
-          const childId = (data.childId || data.child_id || '').toString().trim();
+            normalize(data.motherName || data.patientName || data.name) ||
+            motherNameFromData(data);
+          const motherId = normalize(data.motherId || data.mother_id);
+          const childId = normalize(data.childId || data.child_id);
           const consultationFor = inferAppointmentFor(data);
 
           return {
             id: docItem.id,
             motherName,
-            contact: motherPhoneById.get(motherId) || (data.phone || data.contact || data.motherPhone || '-').toString(),
+            contact: normalize(data.phone || data.contact || data.motherPhone) || '-',
             appointmentTime: toTimeLabel(data.dateTime || data.appointmentTime || data.date),
             consultationFor,
-            reason: (data.reason || data.notes || 'Consultation').toString(),
-            status: (data.status || 'Pending').toString(),
+            reason: normalize(data.reason || data.notes) || 'Consultation',
+            status: normalize(data.status) || 'Pending',
             recordLink:
               consultationFor === 'CHILD'
                 ? motherId
@@ -347,12 +414,11 @@ export default function DoctorDashboard() {
         });
 
         setMetrics({
-          activeMothers: mappedMothers.length,
-          activeMothers: mothersSnapshot.size,
-          activePregnancies: activePregnancyCount,
-          todaysAppointments,
+          activeMothers: visibleMothers.length,
+          todaysAppointments: todaysDoctorAppointments.length,
           infantsMonitored: childrenSnapshot.size,
         });
+
         setAppointments(rows);
       } finally {
         setLoading(false);
@@ -360,7 +426,7 @@ export default function DoctorDashboard() {
     }
 
     loadDashboardData();
-  }, [user?.email, user?.uid]);
+  }, [user?.email, user?.uid, user?.displayName]);
 
   const welcomeName = useMemo(() => {
     if (!doctorName) return 'Doctor';
@@ -388,188 +454,189 @@ export default function DoctorDashboard() {
 
   return (
     <main className="main-content">
-        <div className="header-container">
-          <div>
-            <h1 className="page-title">Clinician Dashboard</h1>
-            <p className="page-subtitle">Welcome back, Dr. {welcomeName}. Here is your clinic overview for today.</p>
-          </div>
+      <div className="header-container">
+        <div>
+          <h1 className="page-title">Clinician Dashboard</h1>
+          <p className="page-subtitle">Welcome back, Dr. {welcomeName}. Here is your clinic overview for today.</p>
+        </div>
+      </div>
+
+      <div className="card-grid">
+        <div className="stat-card">
+          <span className="stat-title">Active Mothers</span>
+          <div className="stat-value">{loading ? '...' : metrics.activeMothers.toLocaleString()}</div>
+          <span className="stat-desc">Mothers available for appointment booking</span>
         </div>
 
-        <div className="card-grid">
-          <div className="stat-card">
-            <span className="stat-title">Active Mothers</span>
-            <div className="stat-value">{loading ? '...' : metrics.activeMothers.toLocaleString()}</div>
-            <span className="stat-desc">
-              Mothers loaded from Firestore
-            </span>
-          </div>
-
-          <div className="stat-card">
-            <span className="stat-title">Today's Appointments</span>
-            <div className="stat-value">{loading ? '...' : metrics.todaysAppointments.toLocaleString()}</div>
-            <span className="stat-desc">
-              For your account today
-            </span>
-          </div>
-
-          <div className="stat-card">
-            <span className="stat-title">Infants Monitored</span>
-            <div className="stat-value">{loading ? '...' : metrics.infantsMonitored.toLocaleString()}</div>
-            <span className="stat-desc">
-              Children loaded from Firestore
-            </span>
-          </div>
+        <div className="stat-card">
+          <span className="stat-title">Today's Appointments</span>
+          <div className="stat-value">{loading ? '...' : metrics.todaysAppointments.toLocaleString()}</div>
+          <span className="stat-desc">For your account today</span>
         </div>
 
-        <div className="content-card">
-          <div className="card-header">
-            <span>Create Appointments (Doctor Side)</span>
-          </div>
+        <div className="stat-card">
+          <span className="stat-title">Infants Monitored</span>
+          <div className="stat-value">{loading ? '...' : metrics.infantsMonitored.toLocaleString()}</div>
+          <span className="stat-desc">Children loaded from Firestore</span>
+        </div>
+      </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 12 }}>
-            <label>
-              <div className="text-muted">Mother</div>
-              <select
-                className="table-filter-input"
-                value={selectedMotherId}
-                onChange={(event) => {
-                  const nextId = event.target.value;
-                  setSelectedMotherId(nextId);
-                  const nextMother = motherOptions.find((item) => item.id === nextId);
-                  if (nextMother) {
-                    setAppointmentStage(nextMother.stage);
-                  }
-                }}
-              >
-                {motherOptions.map((mother) => (
-                  <option key={mother.id} value={mother.id}>
-                    {mother.fullName} ({mother.stage})
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              <div className="text-muted">Stage</div>
-              <select
-                className="table-filter-input"
-                value={appointmentStage}
-                onChange={(event) => setAppointmentStage(event.target.value as 'PRENATAL' | 'POSTNATAL')}
-              >
-                <option value="PRENATAL">Prenatal</option>
-                <option value="POSTNATAL">Postnatal</option>
-              </select>
-            </label>
-
-            <label>
-              <div className="text-muted">Date</div>
-              <input className="table-filter-input" type="date" value={appointmentDate} onChange={(event) => setAppointmentDate(event.target.value)} />
-            </label>
-
-            <label>
-              <div className="text-muted">Time</div>
-              <input className="table-filter-input" type="time" value={appointmentTime} onChange={(event) => setAppointmentTime(event.target.value)} />
-            </label>
-
-            <label style={{ gridColumn: '1 / -1' }}>
-              <div className="text-muted">Reason</div>
-              <input className="table-filter-input" value={appointmentReason} onChange={(event) => setAppointmentReason(event.target.value)} placeholder="Reason for appointment" />
-            </label>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-            <button className="btn btn-primary btn-compact" onClick={createSingleAppointment} disabled={creating || !selectedMotherId}>
-              {creating ? 'Creating...' : 'Create Appointment'}
-            </button>
-          </div>
-
-          {selectedMother ? (
-            <p className="page-subtitle" style={{ marginBottom: 10 }}>
-              {selectedMother.stage === 'POSTNATAL'
-                ? `Postnatal schedule will use baby age (${selectedMother.babyAgeMonths ?? 0} months) to generate appointments.`
-                : `Prenatal schedule will use pregnancy week (${selectedMother.pregnancyWeek ?? 0}) to generate appointments.`}
-            </p>
-          ) : null}
-
-          {actionMessage ? <p className="page-subtitle" style={{ marginBottom: 12 }}>{actionMessage}</p> : null}
+      <div className="content-card">
+        <div className="card-header">
+          <span>Create Appointments (Doctor Side)</span>
         </div>
 
-        <div className="content-card">
-          <div className="card-header">
-            <span>Upcoming Clinical Consultations</span>
-            <button className="btn btn-secondary btn-compact">View All</button>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 12 }}>
+          <label>
+            <div className="text-muted">Mother</div>
+            <select
+              className="table-filter-input"
+              value={selectedMotherId}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setSelectedMotherId(nextId);
+                const nextMother = motherOptions.find((item) => item.id === nextId);
+                if (nextMother) {
+                  setAppointmentStage(nextMother.stage);
+                }
+              }}
+            >
+              <option value="">Select mother</option>
+              {motherOptions.map((mother) => (
+                <option key={mother.id} value={mother.id}>
+                  {mother.fullName} ({mother.stage})
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <div className="table-container">
-            <table className="custom-table">
-              <thead>
+          <label>
+            <div className="text-muted">Stage</div>
+            <select
+              className="table-filter-input"
+              value={appointmentStage}
+              onChange={(event) => setAppointmentStage(event.target.value as 'PRENATAL' | 'POSTNATAL')}
+            >
+              <option value="PRENATAL">Prenatal</option>
+              <option value="POSTNATAL">Postnatal</option>
+            </select>
+          </label>
+
+          <label>
+            <div className="text-muted">Date</div>
+            <input className="table-filter-input" type="date" value={appointmentDate} onChange={(event) => setAppointmentDate(event.target.value)} />
+          </label>
+
+          <label>
+            <div className="text-muted">Time</div>
+            <input className="table-filter-input" type="time" value={appointmentTime} onChange={(event) => setAppointmentTime(event.target.value)} />
+          </label>
+
+          <label style={{ gridColumn: '1 / -1' }}>
+            <div className="text-muted">Reason</div>
+            <input className="table-filter-input" value={appointmentReason} onChange={(event) => setAppointmentReason(event.target.value)} placeholder="Reason for appointment" />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-compact" onClick={createSingleAppointment} disabled={creating || !selectedMotherId}>
+            {creating ? 'Creating...' : 'Create Appointment'}
+          </button>
+        </div>
+
+        {selectedMother ? (
+          <p className="page-subtitle" style={{ marginBottom: 10 }}>
+            {selectedMother.stage === 'POSTNATAL'
+              ? `Postnatal schedule selected (${selectedMother.babyAgeMonths ?? 0} months baby age).`
+              : `Prenatal schedule selected (${selectedMother.pregnancyWeek ?? 0} weeks pregnant).`}
+          </p>
+        ) : null}
+
+        {!loading && motherOptions.length === 0 ? (
+          <p className="page-subtitle" style={{ marginBottom: 10 }}>
+            No mothers found. Confirm that mother profiles exist in Firestore under mothers/Mothers collections.
+          </p>
+        ) : null}
+
+        {actionMessage ? <p className="page-subtitle" style={{ marginBottom: 12 }}>{actionMessage}</p> : null}
+      </div>
+
+      <div className="content-card">
+        <div className="card-header">
+          <span>Upcoming Clinical Consultations</span>
+          <button className="btn btn-secondary btn-compact">View All</button>
+        </div>
+
+        <div className="table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Mother Name</th>
+                <th>Contact</th>
+                <th>Appointment Time</th>
+                <th>For</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+              <tr className="table-filter-row">
+                <th>
+                  <input id="doctor-filter-name" className="table-filter-input" value={nameFilter} onChange={(event) => setNameFilter(event.target.value)} placeholder="Search name" />
+                </th>
+                <th>
+                  <input id="doctor-filter-contact" className="table-filter-input" value={contactFilter} onChange={(event) => setContactFilter(event.target.value)} placeholder="Contact" />
+                </th>
+                <th>
+                  <input id="doctor-filter-time" className="table-filter-input" value={timeFilter} onChange={(event) => setTimeFilter(event.target.value)} placeholder="Time" />
+                </th>
+                <th />
+                <th>
+                  <input id="doctor-filter-reason" className="table-filter-input" value={reasonFilter} onChange={(event) => setReasonFilter(event.target.value)} placeholder="Reason" />
+                </th>
+                <th>
+                  <input id="doctor-filter-status" className="table-filter-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} placeholder="Status" />
+                </th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
                 <tr>
-                  <th>Mother Name</th>
-                  <th>Contact</th>
-                  <th>Appointment Time</th>
-                  <th>For</th>
-                  <th>Reason</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <td colSpan={7}>Loading appointments from Firestore...</td>
                 </tr>
-                <tr className="table-filter-row">
-                  <th>
-                    <input id="doctor-filter-name" className="table-filter-input" value={nameFilter} onChange={(event) => setNameFilter(event.target.value)} placeholder="Search name" />
-                  </th>
-                  <th>
-                    <input id="doctor-filter-contact" className="table-filter-input" value={contactFilter} onChange={(event) => setContactFilter(event.target.value)} placeholder="Contact" />
-                  </th>
-                  <th>
-                    <input id="doctor-filter-time" className="table-filter-input" value={timeFilter} onChange={(event) => setTimeFilter(event.target.value)} placeholder="Time" />
-                  </th>
-                  <th />
-                  <th>
-                    <input id="doctor-filter-reason" className="table-filter-input" value={reasonFilter} onChange={(event) => setReasonFilter(event.target.value)} placeholder="Reason" />
-                  </th>
-                  <th>
-                    <input id="doctor-filter-status" className="table-filter-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} placeholder="Status" />
-                  </th>
-                  <th />
+              ) : filteredAppointments.length === 0 ? (
+                <tr>
+                  <td colSpan={7}>No appointments found for the selected filter.</td>
                 </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={6}>Loading appointments from Firestore...</td>
+              ) : (
+                filteredAppointments.map((appointment) => (
+                  <tr key={appointment.id}>
+                    <td>{appointment.motherName}</td>
+                    <td>{appointment.contact}</td>
+                    <td>{appointment.appointmentTime}</td>
+                    <td>
+                      <span className={`badge ${appointment.consultationFor === 'CHILD' ? 'badge-warning' : 'badge-success'}`}>
+                        {appointment.consultationFor}
+                      </span>
+                    </td>
+                    <td>{appointment.reason}</td>
+                    <td>
+                      <span className={`badge ${getStatusBadgeClass(appointment.status)}`}>
+                        {appointment.status}
+                      </span>
+                    </td>
+                    <td>
+                      <Link href={appointment.recordLink} className="btn btn-primary btn-compact">
+                        Open File
+                      </Link>
+                    </td>
                   </tr>
-                ) : filteredAppointments.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>No appointments found for the selected filter.</td>
-                  </tr>
-                ) : (
-                  filteredAppointments.map((appointment) => (
-                    <tr key={appointment.id}>
-                      <td>{appointment.motherName}</td>
-                      <td>{appointment.contact}</td>
-                      <td>{appointment.appointmentTime}</td>
-                      <td>
-                        <span className={`badge ${appointment.consultationFor === 'CHILD' ? 'badge-warning' : 'badge-success'}`}>
-                          {appointment.consultationFor}
-                        </span>
-                      </td>
-                      <td>{appointment.reason}</td>
-                      <td>
-                        <span className={`badge ${getStatusBadgeClass(appointment.status)}`}>
-                          {appointment.status}
-                        </span>
-                      </td>
-                      <td>
-                        <Link href={appointment.recordLink} className="btn btn-primary btn-compact">
-                          Open File
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </main>
+      </div>
+    </main>
   );
 }

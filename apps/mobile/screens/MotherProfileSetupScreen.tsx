@@ -86,6 +86,8 @@ export default function MotherProfileSetupScreen({
   const [facility, setFacility] = useState('');
   const [emergencyContactName, setEmergencyContactName] = useState('');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
+  const [lockscreenPin, setLockscreenPin] = useState('');
+  const [confirmLockscreenPin, setConfirmLockscreenPin] = useState('');
   const [datePickerChildIndex, setDatePickerChildIndex] = useState<number | null>(null);
   const [datePickerValue, setDatePickerValue] = useState<Date>(new Date());
   const [sexDropdownChildIndex, setSexDropdownChildIndex] = useState<number | null>(null);
@@ -223,6 +225,16 @@ export default function MotherProfileSetupScreen({
       }
     }
 
+    if (!/^\d{4}$/.test(lockscreenPin.trim())) {
+      setError('Please set a 4-digit login PIN.');
+      return;
+    }
+
+    if (lockscreenPin.trim() !== confirmLockscreenPin.trim()) {
+      setError('Login PIN and confirm PIN do not match.');
+      return;
+    }
+
     setError(null);
     setSaving(true);
 
@@ -239,6 +251,7 @@ export default function MotherProfileSetupScreen({
         facility: facility.trim(),
         emergencyContactName: emergencyContactName.trim(),
         emergencyContactPhone: emergencyContactPhone.trim(),
+        lockscreenPin: lockscreenPin.trim(),
         children:
           stage === 'POSTNATAL'
             ? children.map((child, index) => ({
@@ -452,6 +465,30 @@ export default function MotherProfileSetupScreen({
 
           <Text style={styles.label}>Emergency Contact Phone</Text>
           <TextInput style={styles.input} value={emergencyContactPhone} onChangeText={setEmergencyContactPhone} placeholder="07XXXXXXXX" placeholderTextColor="#94a3b8" keyboardType="phone-pad" />
+
+          <Text style={styles.label}>4-digit Login PIN *</Text>
+          <TextInput
+            style={styles.input}
+            value={lockscreenPin}
+            onChangeText={(value) => setLockscreenPin(value.replace(/[^0-9]/g, '').slice(0, 4))}
+            placeholder="Set login PIN"
+            placeholderTextColor="#94a3b8"
+            keyboardType="number-pad"
+            maxLength={4}
+            secureTextEntry
+          />
+
+          <Text style={styles.label}>Confirm Login PIN *</Text>
+          <TextInput
+            style={styles.input}
+            value={confirmLockscreenPin}
+            onChangeText={(value) => setConfirmLockscreenPin(value.replace(/[^0-9]/g, '').slice(0, 4))}
+            placeholder="Confirm login PIN"
+            placeholderTextColor="#94a3b8"
+            keyboardType="number-pad"
+            maxLength={4}
+            secureTextEntry
+          />
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

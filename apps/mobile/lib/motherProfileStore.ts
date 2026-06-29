@@ -33,6 +33,8 @@ export interface MotherProfile {
   motherCode: string;
   fullName: string;
   phone: string;
+  loginPin?: string;
+  lockscreenPin?: string;
   stage: MotherStage;
   pregnancyWeek: string;
   babyAgeMonths: string;
@@ -530,10 +532,19 @@ export async function saveMotherProfile(profile: MotherProfile): Promise<MotherP
     })
     .filter((child) => child.fullName);
 
+  const effectiveLoginPin = readText(profile.loginPin || profile.lockscreenPin, '');
+
   const payload = {
     ...profile,
     email: key,
     motherCode,
+    loginPin: effectiveLoginPin,
+    pinEnabled: Boolean(effectiveLoginPin),
+    pinSetAt: effectiveLoginPin ? new Date().toISOString() : undefined,
+    // Backward compatibility with previously written field name.
+    lockscreenPin: effectiveLoginPin,
+    lockscreenPinEnabled: Boolean(effectiveLoginPin),
+    lockscreenPinSetAt: effectiveLoginPin ? new Date().toISOString() : undefined,
     assignedDoctorId: assignedDoctor?.doctorId || persistedDoctorId || incomingDoctorId || '',
     assignedDoctorName: assignedDoctor?.doctorName || persistedDoctorName || readText(profile.assignedDoctorName, ''),
     assignedDoctorFacility: assignedDoctor?.facility || persistedDoctorFacility || readText(profile.assignedDoctorFacility, ''),

@@ -2,9 +2,61 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { mockUsers, mockMothers, mockDoctors } from '../mockData';
 import { Role } from '@afryamama/types';
+import { getFirebaseAdminAuth, getFirebaseAdminDb } from '../firebaseAdmin';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-afryamama-key-change-me-in-production';
+
+function normalizeEmail(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function getMotherDocId(email: string): string {
+  return normalizeEmail(email).replace(/[^a-z0-9]/gi, '_');
+}
+
+// POST /api/auth/mother-pin-login
+router.post('/mother-pin-login', async (req: Request, res: Response) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required.' });
+    }
+
+    if (!/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ message: 'PIN must be exactly 4 digits.' });
+    }
+
+    const adminDb = getFirebaseAdminDb();
+    const adminAuth = getFirebaseAdminAuth();
+    const motherDocId = getMotherDocId(email);
+
+    const motherDoc = await adminDb.collection('mothers').doc(motherDocId).get();
+    if (!motherDoc.exists) {
+      return res.status(404).json({ message: 'Mother account not found.' });
+    }
+
+    const motherData = (motherDoc.data() || {}) as Record<string, unknown>;
+    const storedPinRaw =
+      (typeof motherData.loginPin === 'string' ? motherData.loginPin : '') ||
+      (typeof motherData.lockscreenPin === 'string' ? motherData.lockscreenPin : '');
+    const storedPin = storedPinRaw.trim();
+
+    if (!storedPin || storedPin !== pin) {
+      return res.status(401).json({ message: 'Invalid PIN.' });
+    }
+
+    const user = await adminAuth.getUserByEmail(email);
+    const token = await adminAuth.createCustomToken(user.uid, { loginMethod: 'pin' });
+
+    return res.status(200).json({ customToken: token });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'PIN login failed.';
+    return res.status(500).json({ message });
+  }
+});
 
 // POST /api/auth/login
 router.post('/login', (req: Request, res: Response) => {

@@ -13,6 +13,7 @@ import {
 
 interface LoginScreenProps {
   onLoginSuccess: (email: string, password: string) => Promise<void>;
+  onPinLoginSuccess: (email: string, pin: string) => Promise<void>;
   onSignUpSuccess: (
     fullName: string,
     email: string,
@@ -22,21 +23,22 @@ interface LoginScreenProps {
 
 export default function LoginScreen({
   onLoginSuccess,
+  onPinLoginSuccess,
   onSignUpSuccess,
 }: LoginScreenProps) {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [isResetMode, setIsResetMode] = useState(false);
+  const [loginMethod, setLoginMethod] = useState<'PASSWORD' | 'PIN'>('PASSWORD');
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [pin, setPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
 
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +70,18 @@ export default function LoginScreen({
   };
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      setError('Email and password are required.');
+    if (!email.trim()) {
+      setError('Email is required.');
+      return;
+    }
+
+    if (loginMethod === 'PASSWORD' && !password.trim()) {
+      setError('Password is required.');
+      return;
+    }
+
+    if (loginMethod === 'PIN' && !/^\d{4}$/.test(pin.trim())) {
+      setError('PIN must be exactly 4 digits.');
       return;
     }
 
@@ -78,7 +90,11 @@ export default function LoginScreen({
     setInfo(null);
 
     try {
-      await onLoginSuccess(email, password);
+      if (loginMethod === 'PIN') {
+        await onPinLoginSuccess(email.trim().toLowerCase(), pin.trim());
+      } else {
+        await onLoginSuccess(email.trim().toLowerCase(), password);
+      }
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Login failed. Check credentials and try again.'));
     } finally {
@@ -112,7 +128,7 @@ export default function LoginScreen({
     setInfo(null);
 
     try {
-      await onSignUpSuccess(fullName, email, password);
+      await onSignUpSuccess(fullName, email.trim().toLowerCase(), password);
 
       setInfo('Account created successfully.');
 
@@ -126,39 +142,6 @@ export default function LoginScreen({
       setError(getAuthErrorMessage(err, 'Account creation failed. Please try again.'));
     } finally {
       setSignupLoading(false);
-    }
-  };
-
-  const handleCreateNewPassword = async () => {
-    if (!email.trim()) {
-      setError('Enter your email address.');
-      return;
-    }
-
-    if (password.trim().length < 6) {
-      setError('New password must be at least 6 characters.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Password and confirm password do not match.');
-      return;
-    }
-
-    setResetLoading(true);
-    setError(null);
-    setInfo(null);
-
-    try {
-      setInfo('Password updated. Please sign in with your new password.');
-      setIsResetMode(false);
-      setIsSignUp(false);
-      setPassword('');
-      setConfirmPassword('');
-    } catch (err) {
-      setError(getAuthErrorMessage(err, 'Failed to update password.'));
-    } finally {
-      setResetLoading(false);
     }
   };
 
@@ -188,9 +171,6 @@ export default function LoginScreen({
                 setError(null);
                 setInfo(null);
                 setIsSignUp(false);
-                setIsResetMode(false);
-                setShowPassword(false);
-                setShowConfirmPassword(false);
               }}
             >
               <Text style={[styles.modeTabText, !isSignUp ? styles.modeTabTextActive : null]}>Log In</Text>
@@ -201,27 +181,22 @@ export default function LoginScreen({
                 setError(null);
                 setInfo(null);
                 setIsSignUp(true);
-                setIsResetMode(false);
-                setShowPassword(false);
-                setShowConfirmPassword(false);
               }}
             >
               <Text style={[styles.modeTabText, isSignUp ? styles.modeTabTextActive : null]}>Sign Up</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.title}>{isResetMode ? 'Reset your password' : isSignUp ? 'Create your account' : 'Welcome back, mama'}</Text>
+          <Text style={styles.title}>{isSignUp ? 'Create your account' : 'Welcome back, mama'}</Text>
 
           <Text style={styles.subtitle}>
-            {isResetMode
-              ? 'Create a new password and confirm it, then sign in.'
-              : isSignUp
+            {isSignUp
               ? 'Create your account then set up your profile.'
-              : 'Log in with your email and password.'}
+              : 'Log in with your email and password, or use your PIN.'}
           </Text>
 
           <View style={styles.form}>
-          {isSignUp && !isResetMode ? (
+          {isSignUp ? (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Full Name</Text>
               <TextInput
@@ -245,26 +220,82 @@ export default function LoginScreen({
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{isResetMode ? 'New Password' : 'Password'}</Text>
-            <View style={styles.passwordRow}>
-              <TextInput
-                style={styles.passwordInput}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                placeholder="Enter your password"
-              />
+          {!isSignUp ? (
+            <View style={styles.loginMethodTabs}>
               <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword((current) => !current)}
+                style={[styles.loginMethodTab, loginMethod === 'PASSWORD' ? styles.loginMethodTabActive : null]}
+                onPress={() => {
+                  setError(null);
+                  setInfo(null);
+                  setLoginMethod('PASSWORD');
+                }}
               >
-                <Text style={styles.eyeButtonText}>{showPassword ? 'Hide' : 'Show'}</Text>
+                <Text
+                  style={[
+                    styles.loginMethodText,
+                    loginMethod === 'PASSWORD' ? styles.loginMethodTextActive : null,
+                  ]}
+                >
+                  Password
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.loginMethodTab, loginMethod === 'PIN' ? styles.loginMethodTabActive : null]}
+                onPress={() => {
+                  setError(null);
+                  setInfo(null);
+                  setLoginMethod('PIN');
+                }}
+              >
+                <Text
+                  style={[
+                    styles.loginMethodText,
+                    loginMethod === 'PIN' ? styles.loginMethodTextActive : null,
+                  ]}
+                >
+                  PIN
+                </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          ) : null}
 
-          {isSignUp || isResetMode ? (
+          {!isSignUp && loginMethod === 'PIN' ? (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>4-digit PIN</Text>
+              <TextInput
+                style={styles.input}
+                value={pin}
+                onChangeText={(value) => setPin(value.replace(/[^0-9]/g, '').slice(0, 4))}
+                keyboardType="number-pad"
+                secureTextEntry
+                placeholder="Enter your PIN"
+                maxLength={4}
+              />
+            </View>
+          ) : null}
+
+          {isSignUp || loginMethod === 'PASSWORD' ? (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder="Enter your password"
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword((current) => !current)}
+                >
+                  <Text style={styles.eyeButtonText}>{showPassword ? 'Hide' : 'Show'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {isSignUp ? (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirm Password</Text>
               <View style={styles.passwordRow}>
@@ -285,32 +316,7 @@ export default function LoginScreen({
             </View>
           ) : null}
 
-            {isResetMode ? (
-            <>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={handleCreateNewPassword}
-              >
-                <Text style={styles.buttonText}>
-                  {resetLoading ? 'Updating password...' : 'Create New Password'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.switchButton}
-                onPress={() => {
-                  setError(null);
-                  setInfo(null);
-                  setIsResetMode(false);
-                  setIsSignUp(false);
-                  setPassword('');
-                  setConfirmPassword('');
-                }}
-              >
-                <Text style={styles.switchButtonText}>Back to Sign In</Text>
-              </TouchableOpacity>
-            </>
-          ) : !isSignUp ? (
+            {!isSignUp ? (
             <>
               <TouchableOpacity
                 style={styles.button}
@@ -318,26 +324,6 @@ export default function LoginScreen({
               >
                 <Text style={styles.buttonText}>
                   {loading ? 'Signing In...' : 'Log In'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.linkButton}
-                onPress={() => {
-                  setError(null);
-                  setInfo(null);
-                  setIsResetMode(true);
-                  setIsSignUp(false);
-                  setPassword('');
-                  setConfirmPassword('');
-                  setShowPassword(false);
-                  setShowConfirmPassword(false);
-                }}
-              >
-                <Text style={styles.linkButtonText}>
-                  {resetLoading
-                    ? 'Opening reset...'
-                    : 'Forgot Password?'}
                 </Text>
               </TouchableOpacity>
             </>
@@ -360,8 +346,6 @@ export default function LoginScreen({
                   setError(null);
                   setInfo(null);
                   setIsSignUp(false);
-                  setShowPassword(false);
-                  setShowConfirmPassword(false);
                 }}
               >
                 <Text style={styles.switchButtonText}>
@@ -464,6 +448,31 @@ const styles = StyleSheet.create({
   },
   modeTabTextActive: {
     color: '#111827',
+  },
+  loginMethodTabs: {
+    flexDirection: 'row',
+    marginBottom: 14,
+    gap: 8,
+  },
+  loginMethodTab: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  loginMethodTabActive: {
+    borderColor: '#4f46e5',
+    backgroundColor: '#eef2ff',
+  },
+  loginMethodText: {
+    color: '#64748b',
+    fontWeight: '700',
+  },
+  loginMethodTextActive: {
+    color: '#1e1b4b',
   },
   title: {
     fontSize: 27,
