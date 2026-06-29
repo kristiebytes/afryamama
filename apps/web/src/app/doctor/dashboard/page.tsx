@@ -20,7 +20,6 @@ interface DashboardMetrics {
 interface AppointmentRow {
   id: string;
   motherName: string;
-  age: string;
   contact: string;
   appointmentTime: string;
   reason: string;
@@ -56,20 +55,6 @@ function getStatusBadgeClass(status: string): string {
   return 'badge-success';
 }
 
-function toAgeLabel(value: unknown): string {
-  if (typeof value !== 'string') return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '-';
-
-  const now = new Date();
-  let age = now.getFullYear() - parsed.getFullYear();
-  const monthDiff = now.getMonth() - parsed.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < parsed.getDate())) {
-    age -= 1;
-  }
-  return age >= 0 ? String(age) : '-';
-}
-
 export default function DoctorDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -77,7 +62,6 @@ export default function DoctorDashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [nameFilter, setNameFilter] = useState('');
-  const [ageFilter, setAgeFilter] = useState('');
   const [contactFilter, setContactFilter] = useState('');
   const [timeFilter, setTimeFilter] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -100,9 +84,9 @@ export default function DoctorDashboard() {
           const firstName = (doctorData.firstName || doctorData.first_name || '').toString().trim();
           const lastName = (doctorData.lastName || doctorData.last_name || '').toString().trim();
           const fullName = `${firstName} ${lastName}`.trim();
-          setDoctorName(fullName || user.displayName || user.email || 'Doctor');
+          setDoctorName(fullName || user.email || 'Doctor');
         } else {
-          setDoctorName(user.displayName || user.email || 'Doctor');
+          setDoctorName(user.email || 'Doctor');
         }
 
         const [mothersSnapshot, pregnanciesSnapshot, childrenSnapshot, allAppointmentsSnapshot] = await Promise.all([
@@ -112,11 +96,36 @@ export default function DoctorDashboard() {
           getDocs(collection(firebaseDb, 'appointments')),
         ]);
 
-        const motherAgeById = new Map<string, string>();
+        const motherPhoneById = new Map<string, string>();
+        const prenatalMotherIds = new Set<string>();
         mothersSnapshot.docs.forEach((docItem: DocSnapshotLike) => {
           const data = docItem.data() as Record<string, unknown>;
-          motherAgeById.set(docItem.id, toAgeLabel(data.dateOfBirth || data.dob));
+          const phone = (data.phone || data.contact || data.phoneNumber || '').toString().trim();
+          if (phone) {
+            motherPhoneById.set(docItem.id, phone);
+          }
+
+          const status = (data.status || data.maternalStatus || data.stage || '').toString().trim().toUpperCase();
+          if (status.includes('PRENATAL') || status.includes('PREG')) {
+            prenatalMotherIds.add(docItem.id);
+          }
         });
+
+        const pregnancyMotherIds = new Set<string>();
+        pregnanciesSnapshot.docs.forEach((docItem: DocSnapshotLike) => {
+          const data = docItem.data() as Record<string, unknown>;
+          const motherId = (data.motherId || data.mother_id || '').toString().trim();
+          const status = (data.status || '').toString().trim().toUpperCase();
+          if (!motherId) return;
+          if (!status || status === 'ACTIVE' || status === 'ONGOING' || status === 'PREGNANT') {
+            pregnancyMotherIds.add(motherId);
+          }
+        });
+
+        const activePregnancyCount = new Set<string>([
+          ...pregnancyMotherIds,
+          ...prenatalMotherIds,
+        ]).size;
 
         const today = new Date();
         const todayKey = today.toISOString().slice(0, 10);
@@ -163,8 +172,7 @@ export default function DoctorDashboard() {
           return {
             id: docItem.id,
             motherName,
-            age: motherAgeById.get(motherId) || '-',
-            contact: (data.phone || data.contact || data.motherPhone || '-').toString(),
+            contact: motherPhoneById.get(motherId) || (data.phone || data.contact || data.motherPhone || '-').toString(),
             appointmentTime: toTimeLabel(data.dateTime || data.appointmentTime || data.date),
             reason: (data.reason || data.notes || 'Consultation').toString(),
             status: (data.status || 'Pending').toString(),
@@ -174,7 +182,7 @@ export default function DoctorDashboard() {
 
         setMetrics({
           activeMothers: mothersSnapshot.size,
-          activePregnancies: pregnanciesSnapshot.size,
+          activePregnancies: activePregnancyCount,
           todaysAppointments,
           infantsMonitored: childrenSnapshot.size,
         });
@@ -185,7 +193,7 @@ export default function DoctorDashboard() {
     }
 
     loadDashboardData();
-  }, [user?.email, user?.uid, user?.displayName]);
+  }, [user?.email, user?.uid]);
 
   const welcomeName = useMemo(() => {
     if (!doctorName) return 'Doctor';
@@ -194,24 +202,22 @@ export default function DoctorDashboard() {
 
   const filteredAppointments = useMemo(() => {
     const nameTerm = nameFilter.trim().toLowerCase();
-    const ageTerm = ageFilter.trim().toLowerCase();
     const contactTerm = contactFilter.trim().toLowerCase();
     const timeTerm = timeFilter.trim().toLowerCase();
     const reasonTerm = reasonFilter.trim().toLowerCase();
     const statusTerm = statusFilter.trim().toLowerCase();
 
-    if (!nameTerm && !ageTerm && !contactTerm && !timeTerm && !reasonTerm && !statusTerm) return appointments;
+    if (!nameTerm && !contactTerm && !timeTerm && !reasonTerm && !statusTerm) return appointments;
 
     return appointments.filter((item) => {
       const nameMatches = !nameTerm || item.motherName.toLowerCase().includes(nameTerm);
-      const ageMatches = !ageTerm || item.age.toLowerCase().includes(ageTerm);
       const contactMatches = !contactTerm || item.contact.toLowerCase().includes(contactTerm);
       const timeMatches = !timeTerm || item.appointmentTime.toLowerCase().includes(timeTerm);
       const reasonMatches = !reasonTerm || item.reason.toLowerCase().includes(reasonTerm);
       const statusMatches = !statusTerm || item.status.toLowerCase().includes(statusTerm);
-      return nameMatches && ageMatches && contactMatches && timeMatches && reasonMatches && statusMatches;
+      return nameMatches && contactMatches && timeMatches && reasonMatches && statusMatches;
     });
-  }, [appointments, nameFilter, ageFilter, contactFilter, timeFilter, reasonFilter, statusFilter]);
+  }, [appointments, nameFilter, contactFilter, timeFilter, reasonFilter, statusFilter]);
 
   return (
     <main className="main-content">
@@ -267,7 +273,6 @@ export default function DoctorDashboard() {
               <thead>
                 <tr>
                   <th>Mother Name</th>
-                  <th>Age</th>
                   <th>Contact</th>
                   <th>Appointment Time</th>
                   <th>Reason</th>
@@ -277,9 +282,6 @@ export default function DoctorDashboard() {
                 <tr className="table-filter-row">
                   <th>
                     <input id="doctor-filter-name" className="table-filter-input" value={nameFilter} onChange={(event) => setNameFilter(event.target.value)} placeholder="Search name" />
-                  </th>
-                  <th>
-                    <input id="doctor-filter-age" className="table-filter-input" value={ageFilter} onChange={(event) => setAgeFilter(event.target.value)} placeholder="Age" />
                   </th>
                   <th>
                     <input id="doctor-filter-contact" className="table-filter-input" value={contactFilter} onChange={(event) => setContactFilter(event.target.value)} placeholder="Contact" />
@@ -299,17 +301,16 @@ export default function DoctorDashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7}>Loading appointments from Firestore...</td>
+                    <td colSpan={6}>Loading appointments from Firestore...</td>
                   </tr>
                 ) : filteredAppointments.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>No appointments found for the selected filter.</td>
+                    <td colSpan={6}>No appointments found for the selected filter.</td>
                   </tr>
                 ) : (
                   filteredAppointments.map((appointment) => (
                     <tr key={appointment.id}>
                       <td>{appointment.motherName}</td>
-                      <td>{appointment.age}</td>
                       <td>{appointment.contact}</td>
                       <td>{appointment.appointmentTime}</td>
                       <td>{appointment.reason}</td>
