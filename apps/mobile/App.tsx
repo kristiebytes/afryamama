@@ -18,12 +18,12 @@ import GrowthMonitoringScreen from './screens/GrowthMonitoringScreen';
 import { firebaseAuth } from './lib/firebaseClient';
 import {
   loadMotherProfile,
-  loginWithFirebase,
   loginWithFirebasePin,
   logoutFromFirebase,
   signUpMotherWithFirebase,
 } from './lib/firebaseAuth';
-import { saveMotherProfile } from './lib/motherProfileStore';
+import { getRememberedMotherEmail, rememberMotherEmail } from './lib/localAuthStore';
+import { getMotherProfileByEmail, saveMotherProfile } from './lib/motherProfileStore';
 
 type Screen =
   | 'LOGIN'
@@ -42,9 +42,16 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('LOGIN');
   const [userName, setUserName] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
+  const [rememberedEmail, setRememberedEmail] = useState<string | null>(null);
   const [pregnancyWeek, setPregnancyWeek] = useState<number | null>(null);
   const [nextAppointmentText, setNextAppointmentText] = useState<string | null>(null);
   const redirectToProfileAfterSignUpRef = useRef(false);
+
+  useEffect(() => {
+    getRememberedMotherEmail()
+      .then((email) => setRememberedEmail(email))
+      .catch(() => setRememberedEmail(null));
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
@@ -57,7 +64,11 @@ export default function App() {
         return;
       }
 
-      const profile = await loadMotherProfile(user);
+      const normalizedEmail = (user.email || '').trim().toLowerCase();
+      const [profile, dbProfile] = await Promise.all([
+        loadMotherProfile(user),
+        normalizedEmail ? getMotherProfileByEmail(normalizedEmail) : Promise.resolve(null),
+      ]);
       setUserName(profile.displayName);
       setUserEmail(user.email || '');
       setPregnancyWeek(profile.pregnancyWeek);
@@ -69,17 +80,32 @@ export default function App() {
         return;
       }
 
+      const hasPin = Boolean(
+        (dbProfile?.loginPin || dbProfile?.lockscreenPin || '').trim()
+      );
+
+      if (!hasPin) {
+        setCurrentScreen('PROFILE_SETUP');
+        return;
+      }
+
+      if (normalizedEmail) {
+        await rememberMotherEmail(normalizedEmail);
+        setRememberedEmail(normalizedEmail);
+      }
+
       setCurrentScreen('DASHBOARD');
     });
 
     return () => unsubscribe();
   }, []);
 
-  const handleLoginSuccess = async (email: string, password: string) => {
-    await loginWithFirebase(email, password);
-  };
+  const handlePinLoginSuccess = async (pin: string) => {
+    const email = (rememberedEmail || '').trim().toLowerCase();
+    if (!email) {
+      throw new Error('No remembered account on this device. Please sign up first.');
+    }
 
-  const handlePinLoginSuccess = async (email: string, pin: string) => {
     await loginWithFirebasePin(email, pin);
   };
 
@@ -104,6 +130,8 @@ export default function App() {
 
   const handleCompleteProfileSetup = async (profile: Parameters<typeof saveMotherProfile>[0]) => {
     await saveMotherProfile(profile);
+    await rememberMotherEmail(profile.email);
+    setRememberedEmail(profile.email.trim().toLowerCase());
     setCurrentScreen('DASHBOARD');
   };
 
@@ -112,7 +140,7 @@ export default function App() {
       case 'LOGIN':
         return (
           <LoginScreen
-            onLoginSuccess={handleLoginSuccess}
+            hasRememberedAccount={Boolean(rememberedEmail)}
             onPinLoginSuccess={handlePinLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
           />
@@ -155,7 +183,7 @@ export default function App() {
       default:
         return (
           <LoginScreen
-            onLoginSuccess={handleLoginSuccess}
+            hasRememberedAccount={Boolean(rememberedEmail)}
             onPinLoginSuccess={handlePinLoginSuccess}
             onSignUpSuccess={handleSignUpSuccess}
           />
