@@ -1,38 +1,41 @@
 import React, { useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TextInput,
-  TouchableOpacity,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface LoginScreenProps {
-  onLoginSuccess: (email: string, password: string) => Promise<void>;
-  onPinLoginSuccess: (email: string, pin: string) => Promise<void>;
-  onSignUpSuccess: (
-    fullName: string,
-    email: string,
-    password: string
-  ) => Promise<void>;
+  hasRememberedAccount: boolean;
+  onPinLoginSuccess: (pin: string) => Promise<void>;
+  onSignUpSuccess: (fullName: string, email: string, password: string) => Promise<void>;
 }
 
+const PIN_ROWS = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['C', '0', 'DEL'],
+] as const;
+
 export default function LoginScreen({
-  onLoginSuccess,
+  hasRememberedAccount,
   onPinLoginSuccess,
   onSignUpSuccess,
 }: LoginScreenProps) {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [loginMethod, setLoginMethod] = useState<'PASSWORD' | 'PIN'>('PASSWORD');
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
   const [pin, setPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -69,18 +72,17 @@ export default function LoginScreen({
     return fallback;
   };
 
-  const handleLogin = async () => {
-    if (!email.trim()) {
-      setError('Email is required.');
+  const handleLogin = async (pinValue?: string) => {
+    if (loading) return;
+
+    const resolvedPin = (pinValue ?? pin).trim();
+
+    if (!hasRememberedAccount) {
+      setError('No saved account on this phone yet. Use Sign Up first.');
       return;
     }
 
-    if (loginMethod === 'PASSWORD' && !password.trim()) {
-      setError('Password is required.');
-      return;
-    }
-
-    if (loginMethod === 'PIN' && !/^\d{4}$/.test(pin.trim())) {
+    if (!/^\d{4}$/.test(resolvedPin)) {
       setError('PIN must be exactly 4 digits.');
       return;
     }
@@ -90,19 +92,48 @@ export default function LoginScreen({
     setInfo(null);
 
     try {
-      if (loginMethod === 'PIN') {
-        await onPinLoginSuccess(email.trim().toLowerCase(), pin.trim());
-      } else {
-        await onLoginSuccess(email.trim().toLowerCase(), password);
-      }
+      await onPinLoginSuccess(resolvedPin);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Login failed. Check credentials and try again.'));
+      setPin('');
     } finally {
       setLoading(false);
     }
   };
 
+  const handlePinPress = (digit: string) => {
+    if (loading || pin.length >= 4) return;
+
+    setError(null);
+    setInfo(null);
+
+    const nextPin = `${pin}${digit}`;
+    setPin(nextPin);
+
+    if (nextPin.length === 4) {
+      void handleLogin(nextPin);
+    }
+  };
+
+  const handlePinBackspace = () => {
+    if (loading || !pin.length) return;
+
+    setError(null);
+    setInfo(null);
+    setPin((current) => current.slice(0, -1));
+  };
+
+  const clearPin = () => {
+    if (loading || !pin.length) return;
+
+    setError(null);
+    setInfo(null);
+    setPin('');
+  };
+
   const handleSignUp = async () => {
+    if (signupLoading) return;
+
     if (!fullName.trim()) {
       setError('Full name is required.');
       return;
@@ -128,15 +159,13 @@ export default function LoginScreen({
     setInfo(null);
 
     try {
-      await onSignUpSuccess(fullName, email.trim().toLowerCase(), password);
+      await onSignUpSuccess(fullName.trim(), email.trim().toLowerCase(), password);
 
       setInfo('Account created successfully.');
-
       setFullName('');
       setEmail('');
       setPassword('');
       setConfirmPassword('');
-
       setIsSignUp(false);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Account creation failed. Please try again.'));
@@ -170,6 +199,7 @@ export default function LoginScreen({
               onPress={() => {
                 setError(null);
                 setInfo(null);
+                setPin('');
                 setIsSignUp(false);
               }}
             >
@@ -188,180 +218,180 @@ export default function LoginScreen({
           </View>
 
           <Text style={styles.title}>{isSignUp ? 'Create your account' : 'Welcome back, mama'}</Text>
-
           <Text style={styles.subtitle}>
             {isSignUp
-              ? 'Create your account then set up your profile.'
-              : 'Log in with your email and password, or use your PIN.'}
+              ? 'Create your account, then set up your profile and 4-digit login PIN.'
+              : 'Enter your 4-digit PIN to unlock.'}
           </Text>
 
           <View style={styles.form}>
-          {isSignUp ? (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Enter your full name"
-              />
-            </View>
-          ) : null}
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              placeholder="Enter your email"
-            />
-          </View>
-
-          {!isSignUp ? (
-            <View style={styles.loginMethodTabs}>
-              <TouchableOpacity
-                style={[styles.loginMethodTab, loginMethod === 'PASSWORD' ? styles.loginMethodTabActive : null]}
-                onPress={() => {
-                  setError(null);
-                  setInfo(null);
-                  setLoginMethod('PASSWORD');
-                }}
-              >
-                <Text
-                  style={[
-                    styles.loginMethodText,
-                    loginMethod === 'PASSWORD' ? styles.loginMethodTextActive : null,
-                  ]}
-                >
-                  Password
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.loginMethodTab, loginMethod === 'PIN' ? styles.loginMethodTabActive : null]}
-                onPress={() => {
-                  setError(null);
-                  setInfo(null);
-                  setLoginMethod('PIN');
-                }}
-              >
-                <Text
-                  style={[
-                    styles.loginMethodText,
-                    loginMethod === 'PIN' ? styles.loginMethodTextActive : null,
-                  ]}
-                >
-                  PIN
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {!isSignUp && loginMethod === 'PIN' ? (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>4-digit PIN</Text>
-              <TextInput
-                style={styles.input}
-                value={pin}
-                onChangeText={(value) => setPin(value.replace(/[^0-9]/g, '').slice(0, 4))}
-                keyboardType="number-pad"
-                secureTextEntry
-                placeholder="Enter your PIN"
-                maxLength={4}
-              />
-            </View>
-          ) : null}
-
-          {isSignUp || loginMethod === 'PASSWORD' ? (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordRow}>
+            {isSignUp ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Full Name</Text>
                 <TextInput
-                  style={styles.passwordInput}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  placeholder="Enter your password"
+                  style={styles.input}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  placeholder="Enter your full name"
                 />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword((current) => !current)}
-                >
-                  <Text style={styles.eyeButtonText}>{showPassword ? 'Hide' : 'Show'}</Text>
-                </TouchableOpacity>
               </View>
-            </View>
-          ) : null}
-
-          {isSignUp ? (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.passwordRow}>
-                <TextInput
-                  style={styles.passwordInput}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirmPassword}
-                  placeholder="Confirm your password"
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowConfirmPassword((current) => !current)}
-                >
-                  <Text style={styles.eyeButtonText}>{showConfirmPassword ? 'Hide' : 'Show'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
+            ) : null}
 
             {!isSignUp ? (
-            <>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={handleLogin}
-              >
-                <Text style={styles.buttonText}>
-                  {loading ? 'Signing In...' : 'Log In'}
-                </Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={handleSignUp}
-              >
-                <Text style={styles.buttonText}>
-                  {signupLoading
-                    ? 'Creating Account...'
-                    : 'Create Account'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.lockscreenWrap}>
+                <View style={styles.pinDotsRow}>
+                  {[0, 1, 2, 3].map((index) => (
+                    <View key={index} style={[styles.pinDot, pin.length > index ? styles.pinDotFilled : null]} />
+                  ))}
+                </View>
 
+                <View style={styles.pinPad}>
+                  {PIN_ROWS.map((row) => (
+                    <View key={row.join('-')} style={styles.pinPadRow}>
+                      {row.map((item) => {
+                        if (item === 'C') {
+                          return (
+                            <TouchableOpacity
+                              key={item}
+                              style={[styles.pinKey, styles.pinKeyAlt]}
+                              onPress={clearPin}
+                              disabled={loading || !pin.length}
+                            >
+                              <Text style={styles.pinKeyAltText}>Clear</Text>
+                            </TouchableOpacity>
+                          );
+                        }
+
+                        if (item === 'DEL') {
+                          return (
+                            <TouchableOpacity
+                              key={item}
+                              style={[styles.pinKey, styles.pinKeyAlt]}
+                              onPress={handlePinBackspace}
+                              disabled={loading || !pin.length}
+                            >
+                              <Text style={styles.pinKeyAltText}>Delete</Text>
+                            </TouchableOpacity>
+                          );
+                        }
+
+                        return (
+                          <TouchableOpacity
+                            key={item}
+                            style={styles.pinKey}
+                            onPress={() => handlePinPress(item)}
+                            disabled={loading || pin.length >= 4}
+                          >
+                            <Text style={styles.pinKeyText}>{item}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </View>
+
+                {!hasRememberedAccount ? (
+                  <Text style={styles.lockHint}>No account is ready for PIN login yet. Tap Sign Up, then complete profile setup to create your PIN.</Text>
+                ) : null}
+
+                {loading ? <Text style={styles.lockHint}>Unlocking...</Text> : null}
+              </View>
+            ) : null}
+
+            {isSignUp ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email Address</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholder="Enter your email"
+                />
+              </View>
+            ) : null}
+
+            {isSignUp ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password</Text>
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    placeholder="Enter your password"
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowPassword((current) => !current)}
+                  >
+                    <Text style={styles.eyeButtonText}>{showPassword ? 'Hide' : 'Show'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {isSignUp ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Confirm Password</Text>
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry={!showConfirmPassword}
+                    placeholder="Confirm your password"
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowConfirmPassword((current) => !current)}
+                  >
+                    <Text style={styles.eyeButtonText}>{showConfirmPassword ? 'Hide' : 'Show'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {!isSignUp ? (
               <TouchableOpacity
-                style={styles.switchButton}
+                style={[styles.button, loading ? styles.buttonDisabled : null]}
                 onPress={() => {
-                  setError(null);
-                  setInfo(null);
-                  setIsSignUp(false);
+                  void handleLogin();
                 }}
+                disabled={loading}
               >
-                <Text style={styles.switchButtonText}>
-                  Already have an account? Log In
-                </Text>
+                <Text style={styles.buttonText}>{loading ? 'Signing In...' : 'Log In'}</Text>
               </TouchableOpacity>
-            </>
-          )}
+            ) : (
+              <View>
+                <TouchableOpacity
+                  style={[styles.button, signupLoading ? styles.buttonDisabled : null]}
+                  onPress={() => {
+                    void handleSignUp();
+                  }}
+                  disabled={signupLoading}
+                >
+                  <Text style={styles.buttonText}>{signupLoading ? 'Creating Account...' : 'Create Account'}</Text>
+                </TouchableOpacity>
 
-          {error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : null}
+                <TouchableOpacity
+                  style={styles.switchButton}
+                  onPress={() => {
+                    setError(null);
+                    setInfo(null);
+                    setIsSignUp(false);
+                  }}
+                  disabled={signupLoading}
+                >
+                  <Text style={styles.switchButtonText}>Already have an account? Log In</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-          {info ? (
-            <Text style={styles.infoText}>{info}</Text>
-          ) : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {info ? <Text style={styles.infoText}>{info}</Text> : null}
           </View>
         </View>
       </ScrollView>
@@ -449,31 +479,6 @@ const styles = StyleSheet.create({
   modeTabTextActive: {
     color: '#111827',
   },
-  loginMethodTabs: {
-    flexDirection: 'row',
-    marginBottom: 14,
-    gap: 8,
-  },
-  loginMethodTab: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-  },
-  loginMethodTabActive: {
-    borderColor: '#4f46e5',
-    backgroundColor: '#eef2ff',
-  },
-  loginMethodText: {
-    color: '#64748b',
-    fontWeight: '700',
-  },
-  loginMethodTextActive: {
-    color: '#1e1b4b',
-  },
   title: {
     fontSize: 27,
     fontWeight: '800',
@@ -489,6 +494,70 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 16,
+  },
+  lockscreenWrap: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  pinDotsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+    marginTop: 4,
+  },
+  pinDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
+  pinDotFilled: {
+    borderColor: '#6d28d9',
+    backgroundColor: '#6d28d9',
+  },
+  pinPad: {
+    width: '100%',
+    gap: 10,
+  },
+  pinPadRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  pinKey: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#dbe1ff',
+    backgroundColor: '#f8faff',
+  },
+  pinKeyAlt: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
+  },
+  pinKeyText: {
+    color: '#111827',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  pinKeyAltText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  lockHint: {
+    marginTop: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 18,
   },
   label: {
     marginBottom: 6,
@@ -531,17 +600,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
   buttonText: {
     color: '#fff',
     fontWeight: '700',
-  },
-  linkButton: {
-    marginTop: 14,
-    alignItems: 'center',
-  },
-  linkButtonText: {
-    color: '#4f46e5',
-    fontWeight: '600',
   },
   switchButton: {
     marginTop: 16,

@@ -17,12 +17,86 @@ import {
 	setDoc,
 	where,
 } from 'firebase/firestore';
+import Constants from 'expo-constants';
+import { NativeModules, Platform } from 'react-native';
 import { firebaseAuth, firebaseDb } from './firebaseClient';
 
-function getApiBaseUrl(): string {
+function uniqueUrls(values: string[]): string[] {
+	const seen = new Set<string>();
+	const ordered: string[] = [];
+
+	for (const value of values) {
+		const normalized = value.trim().replace(/\/$/, '');
+		if (!normalized || seen.has(normalized)) continue;
+		seen.add(normalized);
+		ordered.push(normalized);
+	}
+
+	return ordered;
+}
+
+function inferMetroHost(): string {
+	try {
+		const expoHostUri =
+			typeof Constants?.expoConfig?.hostUri === 'string'
+				? Constants.expoConfig.hostUri
+				: '';
+		if (expoHostUri.trim()) {
+			const host = expoHostUri.split(':')[0]?.trim() || '';
+			if (host && host !== 'localhost' && host !== '127.0.0.1') {
+				return host;
+			}
+		}
+
+		const scriptURL =
+			typeof NativeModules?.SourceCode?.scriptURL === 'string'
+				? NativeModules.SourceCode.scriptURL
+				: '';
+
+		if (!scriptURL) return '';
+
+		const match = scriptURL.match(/^[a-z][a-z0-9+.-]*:\/\/([^/:?#]+)(?::\d+)?/i);
+		if (!match?.[1]) return '';
+
+		const host = match[1].trim();
+		if (!host || host === 'localhost' || host === '127.0.0.1') return '';
+		return host;
+	} catch {
+		return '';
+	}
+}
+
+function getApiBaseUrls(): string[] {
 	const configured = (process.env.EXPO_PUBLIC_API_BASE_URL || '').trim();
-	if (configured) return configured.replace(/\/$/, '');
-	return 'http://localhost:5055';
+	const metroHost = inferMetroHost();
+	const isPhysicalDevice = Boolean(Constants?.isDevice);
+
+	return uniqueUrls([
+		configured,
+		metroHost ? `http://${metroHost}:5055` : '',
+		Platform.OS === 'android' ? 'http://10.0.2.2:5055' : '',
+		isPhysicalDevice ? '' : 'http://localhost:5055',
+	]);
+}
+
+async function postJsonWithTimeout(
+	url: string,
+	body: unknown,
+	timeoutMs: number
+): Promise<Response> {
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+	try {
+		return await fetch(url, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body),
+			signal: controller.signal,
+		});
+	} finally {
+		clearTimeout(timeoutId);
+	}
 }
 
 export interface MotherProfile {
@@ -179,25 +253,52 @@ export async function loginWithFirebasePin(email: string, pin: string) {
 		throw new Error('PIN must be exactly 4 digits.');
 	}
 
-	const baseUrl = getApiBaseUrl();
-	const response = await fetch(`${baseUrl}/api/auth/mother-pin-login`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ email: normalizedEmail, pin: normalizedPin }),
-	});
+	const baseUrls = getApiBaseUrls();
+	const attempted: string[] = [];
+	let lastNetworkError: string | null = null;
 
-	const payload = (await response.json().catch(() => ({}))) as {
-		customToken?: string;
-		message?: string;
-	};
+	for (const baseUrl of baseUrls) {
+		attempted.push(baseUrl);
 
-	if (!response.ok || !payload.customToken) {
-		throw new Error(payload.message || 'PIN login failed.');
+		try {
+			const response = await postJsonWithTimeout(
+				`${baseUrl}/api/auth/mother-pin-login`,
+				{ email: normalizedEmail, pin: normalizedPin },
+				4500
+			);
+
+			const payload = (await response.json().catch(() => ({}))) as {
+				customToken?: string;
+				message?: string;
+			};
+
+			if (!response.ok || !payload.customToken) {
+				throw new Error(payload.message || 'PIN login failed.');
+			}
+
+			const credential = await signInWithCustomToken(firebaseAuth, payload.customToken);
+			void safeEnsureMotherProfileForUser(credential.user);
+			return credential;
+		} catch (error) {
+			// If backend replied with an auth/business error, show it directly.
+			if (
+				error instanceof Error &&
+				error.name !== 'AbortError' &&
+				!/Network request failed/i.test(error.message)
+			) {
+				throw error;
+			}
+
+			lastNetworkError =
+				error instanceof Error && error.name === 'AbortError'
+					? `Timed out at ${baseUrl}`
+					: `Unreachable at ${baseUrl}`;
+		}
 	}
 
-	const credential = await signInWithCustomToken(firebaseAuth, payload.customToken);
-	await safeEnsureMotherProfileForUser(credential.user);
-	return credential;
+	throw new Error(
+		`PIN login timed out. Start backend with npm run dev:server and ensure device can reach one of: ${attempted.join(', ')}. Last check: ${lastNetworkError || 'network unavailable'}.`
+	);
 }
 
 export async function signUpMotherWithFirebase(fullName: string, email: string, password: string) {
